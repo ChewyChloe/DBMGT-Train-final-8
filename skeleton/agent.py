@@ -46,6 +46,7 @@ from databases.relational.queries import (
     query_user_bookings,
     execute_booking,
     execute_cancellation,
+    query_payment_info,
     query_policy_vector_search,
 )
 from databases.graph.queries import (
@@ -237,6 +238,18 @@ TOOLS = [
         "required": ["query"],
     },
     {
+        "name": "check_payment_status",
+        "description": (
+            "Check the payment status of a specific booking or trip. "
+            "Supports National Rail (e.g. BK001) and Metro (e.g. MT001) IDs. "
+            "If the user asks about payment but doesn't provide an ID, ask them for the booking or trip ID first."
+        ),
+        "parameters": {
+            "booking_id": {"type": "string", "description": "The specific booking or trip ID (e.g., BK001 or MT001)."},
+        },
+        "required": ["booking_id"],
+    },
+    {
         "name": "find_route",
         "description": (
             "Find the best route or path between two stations. Use for ANY question about "
@@ -284,6 +297,7 @@ get_available_seats(schedule_id, travel_date, fare_class)
 make_booking(schedule_id, origin_station_id, destination_station_id, travel_date, fare_class, seat_id, ticket_type?)
 cancel_booking(booking_id)
 get_user_bookings()
+check_payment_status(booking_id)
 search_policy(query)
 find_alternative_routes(origin_id, destination_id, avoid_station_id, network?)
 get_delay_ripple(station_id, hops?)"""
@@ -347,6 +361,11 @@ def _execute_tool(
             if not current_user_email:
                 return json.dumps({"error": "No user is currently logged in."})
             result = query_user_bookings(current_user_email)
+
+        elif tool_name == "check_payment_status":
+            result = query_payment_info(params["booking_id"])
+            if result is None:
+                result = {"error": f"No payment record found for ID: {params['booking_id']}"}
 
         elif tool_name == "get_available_seats":
             result = query_available_seats(**params)
