@@ -70,8 +70,8 @@ class ConnectionData:
     line: str
     travel_time_min: int
     connection_type: str
-    service_type: str = "local"
-    per_stop_rate_usd: float = 0.5
+    service_type: str = "normal"
+    per_stop_rate_usd: float = 1.50
 
 
 # ============================================================================
