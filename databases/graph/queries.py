@@ -132,52 +132,44 @@ def query_station_connections(station_id: str) -> Dict:
 def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> List[Dict]:
     """
     查询某个车站延误时，影响周围多少个车站
+    使用 APOC subgraphNodes 从延误站向外扩散
     
     Args:
         delayed_station_id: 延误的车站 ID（例如 "MS05"）
         hops: 延误传播的跳数（默认 2）
-    
-    Returns:
-        [
-            {
-                "station_id": "MS04",
-                "station_name": "Adjacent Station",
-                "hops_from_delay": 1,
-                "affected_lines": ["M1", "M2"]
-            }
-        ]
     """
     try:
         with driver.session() as session:
-            # 查询延误影响的范围
-            result = session.run(f"""
-                MATCH (center)-[*1..{hops}]-(affected)
-                WHERE center.station_id = $delayed_station
-                AND affected.station_id <> $delayed_station
-                RETURN 
-                    affected.station_id as station_id,
-                    affected.name as station_name,
-                    affected.lines as lines,
-                    length(shortestPath((center)-[*]-(affected))) as hop_count
-                ORDER BY hop_count
-            """, delayed_station=delayed_station_id)
-            
+            result = session.run("""
+                MATCH (center {station_id: $delayed_station})
+                CALL apoc.path.subgraphNodes(center, {
+                    maxLevel: $hops,
+                    relationshipFilter: 'METRO_LINK|RAIL_LINK'
+                })
+                YIELD node
+                WITH node                 
+                WHERE node.station_id <> $delayed_station
+                RETURN
+                    node.station_id as station_id,
+                    node.name as station_name,
+                    node.lines as lines
+                ORDER BY station_id
+            """, delayed_station=delayed_station_id, hops=hops)
+
             records = list(result)
             affected_stations = []
-            
+
             for record in records:
                 affected_stations.append({
                     "station_id": record.get("station_id"),
                     "station_name": record.get("station_name"),
-                    "hops_from_delay": record.get("hop_count"),
                     "affected_lines": record.get("lines", [])
                 })
-            
+
             return affected_stations
-    
+
     except Exception as e:
         return [{"error": f"Query failed: {str(e)}"}]
-
 
 # ============================================================================
 # 3️⃣ query_shortest_route() - 查询最短路径（最重要）
