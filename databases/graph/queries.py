@@ -27,7 +27,7 @@ load_dotenv()
 # 读取配置
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:8001")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "transitflow2026")
 
 # 创建 driver
 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
@@ -210,7 +210,7 @@ def query_shortest_route(origin_id: str, destination_id: str, network: str = "au
             # 查询最短路径
             result = session.run("""
                 MATCH path = shortestPath(
-                    (origin)-[*]-(destination)
+                    (origin)-[*1...10]-(destination)
                 )
                 WHERE origin.station_id = $origin_id 
                 AND destination.station_id = $destination_id

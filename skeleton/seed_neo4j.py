@@ -19,8 +19,10 @@ import os
 from typing import Dict, List, Optional
 from neo4j import GraphDatabase, Session
 from dataclasses import dataclass
+from dotenv import load_dotenv
 from pathlib import Path
 
+load_dotenv()
 
 # ============================================================================
 # Configuration
@@ -29,9 +31,9 @@ from pathlib import Path
 class Config:
     """Neo4j 连接配置"""
     
-    NEO4J_URI = "bolt://localhost:8001"
-    NEO4J_USERNAME = "neo4j"
-    NEO4J_PASSWORD = "password"  
+    NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:8001")
+    NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
+    NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "transitflow2026")
     
     # 测资路径
     DATA_DIR = Path(__file__).parent.parent / "train-mock-data"
