@@ -185,41 +185,26 @@ def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> List[Dict]:
 
 def query_shortest_route(origin_id: str, destination_id: str, network: str = "auto") -> Dict:
     """
-    查询两个车站之间的最短路径
+    查询两个车站之间时间最短的路径（使用 Dijkstra 演算法）
     
     Args:
         origin_id: 起始站 ID（例如 "MS01"）
         destination_id: 目标站 ID（例如 "MS10"）
         network: "auto" / "metro" / "rail"
-    
-    Returns:
-        {
-            "origin": {"station_id": "MS01", "station_name": "..."},
-            "destination": {"station_id": "MS10", "station_name": "..."},
-            "route": [
-                {"station_id": "MS01", "station_name": "...", "line": "M1"}
-            ],
-            "total_time_min": 15,
-            "num_stops": 5,
-            "transfers": 0,
-            "lines_used": ["M1"]
-        }
     """
     try:
         with driver.session() as session:
-            # 查询最短路径
             result = session.run("""
-                MATCH path = shortestPath(
-                    (origin)-[*1...10]-(destination)
-                )
-                WHERE origin.station_id = $origin_id 
-                AND destination.station_id = $destination_id
-                RETURN path,
-                    reduce(total=0, r IN relationships(path) | total + r.travel_time_min) as total_time
-                LIMIT 1
+                MATCH (origin {station_id: $origin_id})
+                MATCH (destination {station_id: $destination_id})
+                CALL apoc.algo.dijkstra(origin, destination, 
+                    'METRO_LINK|RAIL_LINK|INTERCHANGE_TO', 
+                    'travel_time_min')
+                YIELD path, weight
+                RETURN path, weight
             """, origin_id=origin_id, destination_id=destination_id)
             
-            record = record = next(result, None)
+            record = next(result, None)
             
             if not record:
                 return {
@@ -230,10 +215,10 @@ def query_shortest_route(origin_id: str, destination_id: str, network: str = "au
                 }
             
             path = record.get("path")
-            total_time = record.get("total_time", 0)
+            total_time = record.get("weight", 0)
+            nodes = list(path.nodes)
+            relationships = list(path.relationships)
             
-            # 解析路径中的节点
-            nodes = path.nodes
             route = []
             lines_used = set()
             
@@ -244,8 +229,6 @@ def query_shortest_route(origin_id: str, destination_id: str, network: str = "au
                     "lines": node.get("lines", [])
                 })
             
-            # 获取所有关系中的 line
-            relationships = path.relationships
             for rel in relationships:
                 if rel.get("line"):
                     lines_used.add(rel.get("line"))
@@ -260,9 +243,9 @@ def query_shortest_route(origin_id: str, destination_id: str, network: str = "au
                     "station_name": nodes[-1].get("name")
                 },
                 "route": route,
-                "total_time_min": total_time if total_time else 0,
+                "total_time_min": int(total_time),
                 "num_stops": len(nodes),
-                "transfers": 0,  # 简化版本，之后可改进
+                "transfers": sum(1 for r in relationships if r.type == "INTERCHANGE_TO"),
                 "lines_used": list(lines_used)
             }
     
@@ -273,79 +256,85 @@ def query_shortest_route(origin_id: str, destination_id: str, network: str = "au
             "error": f"Query failed: {str(e)}"
         }
 
-
 # ============================================================================
 # 4️⃣ query_alternative_routes() - 查询替代路线
 # ============================================================================
 
 def query_alternative_routes(
-    origin_id: str, 
-    destination_id: str, 
-    avoid_station_id: str, 
+    origin_id: str,
+    destination_id: str,
+    avoid_station_id: str,
     network: str = "auto",
     max_routes: int = 3
 ) -> List[Dict]:
     """
     查询替代路线（当某个站关闭时）
+    使用 Dijkstra 演算法，排除指定车站后找最短时间路线
     
     Args:
         origin_id: 起始站
         destination_id: 目标站
         avoid_station_id: 要避开的站
         max_routes: 最多返回几条路线
-    
-    Returns:
-        [
-            {
-                "route": [...],
-                "total_time_min": 15,
-                "num_stops": 5,
-                "rank": 1
-            }
-        ]
     """
     try:
         with driver.session() as session:
-            # 查询不经过 avoid_station 的路线
-            result = session.run(f"""
-                MATCH path = (origin)-[*]-(destination)
-                WHERE origin.station_id = $origin_id 
-                AND destination.station_id = $destination_id
-                AND NOT any(n IN nodes(path) WHERE n.station_id = $avoid_station)
-                WITH path, 
-                    reduce(total=0, r IN relationships(path) | total + r.travel_time_min) as total_time
-                ORDER BY total_time, length(path)
-                LIMIT {max_routes}
-                RETURN path, total_time
-            """, origin_id=origin_id, destination_id=destination_id, avoid_station=avoid_station_id)
-            
+            result = session.run("""
+                MATCH (origin {station_id: $origin_id})
+                MATCH (destination {station_id: $destination_id})
+                MATCH (avoid {station_id: $avoid_station_id})
+                CALL apoc.algo.dijkstra(origin, destination,
+                    'METRO_LINK|RAIL_LINK|INTERCHANGE_TO',
+                    'travel_time_min')
+                YIELD path, weight
+                WHERE none(n IN nodes(path) WHERE n.station_id = $avoid_station_id)
+                RETURN path, weight
+                LIMIT $max_routes
+            """, 
+            origin_id=origin_id,
+            destination_id=destination_id,
+            avoid_station_id=avoid_station_id,
+            max_routes=max_routes)
+
             records = list(result)
+
+            if not records:
+                return [{"error": f"No alternative route found avoiding {avoid_station_id}"}]
+
             alternatives = []
-            
+
             for rank, record in enumerate(records, 1):
                 path = record.get("path")
-                total_time = record.get("total_time", 0)
-                nodes = path.nodes
-                
+                total_time = record.get("weight", 0)
+                nodes = list(path.nodes)
+                relationships = list(path.relationships)
+
                 route = []
+                lines_used = set()
+
                 for node in nodes:
                     route.append({
                         "station_id": node.get("station_id"),
                         "station_name": node.get("name")
                     })
-                
+
+                for rel in relationships:
+                    if rel.get("line"):
+                        lines_used.add(rel.get("line"))
+
                 alternatives.append({
+                    "rank": rank,
                     "route": route,
-                    "total_time_min": total_time if total_time else 0,
+                    "total_time_min": int(total_time),
                     "num_stops": len(nodes),
-                    "rank": rank
+                    "lines_used": list(lines_used),
+                    "avoided_station": avoid_station_id
                 })
-            
-            return alternatives if alternatives else [{"error": "No alternative route found"}]
-    
+
+            return alternatives
+
     except Exception as e:
         return [{"error": f"Query failed: {str(e)}"}]
-
 
 # ============================================================================
 # 5️⃣ query_interchange_path() - 查询跨系统转乘路线（最复杂）
@@ -354,111 +343,90 @@ def query_alternative_routes(
 def query_interchange_path(origin_id: str, destination_id: str) -> Dict:
     """
     查询跨系统转乘路线（Metro ↔ National Rail）
+    使用 Dijkstra 演算法，以 travel_time_min 为权重
     
     Args:
         origin_id: 起始站（可以是任何类型）
         destination_id: 目标站（可以是任何类型）
-    
-    Returns:
-        {
-            "origin": {"station_id": "MS01", ...},
-            "destination": {"station_id": "NR05", ...},
-            "metro_part": [...],
-            "interchange": {"from": ..., "to": ..., "walk_time_min": 5},
-            "rail_part": [...],
-            "total_time_min": 30,
-            "total_stops": 8,
-            "transfers": 1
-        }
     """
     try:
         with driver.session() as session:
-            # 查询包含转乘的路线
             result = session.run("""
-                MATCH path = shortestPath(
-                    (origin)-[*]-(destination)
-                )
-                WHERE origin.station_id = $origin_id 
-                AND destination.station_id = $destination_id
-                AND any(rel in relationships(path) WHERE type(rel) = "INTERCHANGE_TO")
-                RETURN path,
-                    reduce(total=0, r IN relationships(path) | total + r.travel_time_min) as total_time
-                LIMIT 1
+                MATCH (origin {station_id: $origin_id})
+                MATCH (destination {station_id: $destination_id})
+                CALL apoc.algo.dijkstra(origin, destination,
+                    'METRO_LINK|RAIL_LINK|INTERCHANGE_TO',
+                    'travel_time_min')
+                YIELD path, weight
+                RETURN path, weight
             """, origin_id=origin_id, destination_id=destination_id)
-            
+
             record = next(result, None)
-            
+
             if not record:
                 return {
                     "origin": {"station_id": origin_id},
                     "destination": {"station_id": destination_id},
                     "error": "No interchange path found"
                 }
-            
+
             path = record.get("path")
-            total_time = record.get("total_time", 0)
-            nodes = path.nodes
-            relationships = path.relationships
-            
-            # 找到转乘点
-            interchange_info = None
+            total_time = record.get("weight", 0)
+            nodes = list(path.nodes)
+            relationships = list(path.relationships)
+
+            # 找到轉乘點，分割 metro 和 rail 兩段
             metro_part = []
             rail_part = []
+            interchange_info = None
             current_part = "metro"
-            
+
             for i, node in enumerate(nodes):
                 station = {
                     "station_id": node.get("station_id"),
                     "station_name": node.get("name"),
                     "lines": node.get("lines", [])
                 }
-                
-                # 检查是否经过转乘点
-                if i > 0 and i < len(relationships):
-                    rel = relationships[i - 1]
-                    if rel.type == "INTERCHANGE_TO":
-                        current_part = "rail"
-                        # 记录转乘信息
-                        if not interchange_info:
-                            interchange_info = {
-                                "from_station_id": nodes[i-1].get("station_id"),
-                                "from_station_name": nodes[i-1].get("name"),
-                                "to_station_id": node.get("station_id"),
-                                "to_station_name": node.get("name"),
-                                "walk_time_min": rel.get("travel_time_min", 5)
-                            }
-                
+
+                # 檢查前一條關係是不是 INTERCHANGE_TO
+                if i > 0 and relationships[i - 1].type == "INTERCHANGE_TO":
+                    current_part = "rail"
+                    interchange_info = {
+                        "from_station_id": nodes[i - 1].get("station_id"),
+                        "from_station_name": nodes[i - 1].get("name"),
+                        "to_station_id": node.get("station_id"),
+                        "to_station_name": node.get("name"),
+                        "walk_time_min": int(relationships[i - 1].get("travel_time_min", 5))
+                    }
+
                 if current_part == "metro":
                     metro_part.append(station)
                 else:
                     rail_part.append(station)
-            
+
             return {
                 "origin": {
                     "station_id": nodes[0].get("station_id"),
-                    "station_name": nodes[0].get("name"),
-                    "type": "metro" if nodes[0].labels and "MetroStation" in nodes[0].labels else "rail"
+                    "station_name": nodes[0].get("name")
                 },
                 "destination": {
                     "station_id": nodes[-1].get("station_id"),
-                    "station_name": nodes[-1].get("name"),
-                    "type": "metro" if nodes[-1].labels and "MetroStation" in nodes[-1].labels else "rail"
+                    "station_name": nodes[-1].get("name")
                 },
-                "metro_part": metro_part if metro_part else [],
+                "metro_part": metro_part,
                 "interchange": interchange_info if interchange_info else {},
-                "rail_part": rail_part if rail_part else [],
-                "total_time_min": total_time if total_time else 0,
+                "rail_part": rail_part,
+                "total_time_min": int(total_time),
                 "total_stops": len(nodes),
                 "transfers": 1 if interchange_info else 0
             }
-    
+
     except Exception as e:
         return {
             "origin": {"station_id": origin_id},
             "destination": {"station_id": destination_id},
             "error": f"Query failed: {str(e)}"
         }
-
 
 # ============================================================================
 # 6️⃣ query_cheapest_route() - 查询最便宜路线
