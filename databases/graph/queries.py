@@ -425,62 +425,82 @@ def query_interchange_path(origin_id: str, destination_id: str) -> Dict:
 # ============================================================================
 
 def query_cheapest_route(
-    origin_id: str, 
-    destination_id: str, 
+    origin_id: str,
+    destination_id: str,
     network: str = "auto",
     fare_class: str = "standard"
 ) -> Dict:
     """
     查询最便宜路线
-    
-    Note: 现在的数据没有票价信息，所以先用最短路径代替
-    之后可以加上真实的票价逻辑
+    使用 Dijkstra 演算法，以 per_stop_rate_usd 為權重找最低費用路線
     
     Args:
         origin_id: 起始站
         destination_id: 目标站
-        fare_class: "standard" / "express"
-    
-    Returns:
-        {
-            "route": [...],
-            "total_cost_usd": 2.50,
-            "total_time_min": 20,
-            "fare_class": "standard"
-        }
+        fare_class: "standard" / "first"
     """
     try:
-        # 现在用最短路径，之后可改进
-        shortest = query_shortest_route(origin_id, destination_id, network)
-        
-        if "error" in shortest:
+        with driver.session() as session:
+            result = session.run("""
+                MATCH (origin {station_id: $origin_id})
+                MATCH (destination {station_id: $destination_id})
+                CALL apoc.algo.dijkstra(origin, destination,
+                    'METRO_LINK|RAIL_LINK|INTERCHANGE_TO',
+                    'per_stop_rate_usd')
+                YIELD path, weight
+                RETURN path, weight
+            """, origin_id=origin_id, destination_id=destination_id)
+
+            record = next(result, None)
+
+            if not record:
+                return {
+                    "origin": {"station_id": origin_id},
+                    "destination": {"station_id": destination_id},
+                    "error": "No route found"
+                }
+
+            path = record.get("path")
+            total_cost = record.get("weight", 0)
+            nodes = list(path.nodes)
+            relationships = list(path.relationships)
+
+            route = []
+            lines_used = set()
+
+            for node in nodes:
+                route.append({
+                    "station_id": node.get("station_id"),
+                    "station_name": node.get("name")
+                })
+
+            for rel in relationships:
+                if rel.get("line"):
+                    lines_used.add(rel.get("line"))
+
             return {
-                "origin": {"station_id": origin_id},
-                "destination": {"station_id": destination_id},
-                "error": shortest.get("error")
+                "origin": {
+                    "station_id": nodes[0].get("station_id"),
+                    "station_name": nodes[0].get("name")
+                },
+                "destination": {
+                    "station_id": nodes[-1].get("station_id"),
+                    "station_name": nodes[-1].get("name")
+                },
+                "route": route,
+                "total_cost_usd": round(float(total_cost), 2),
+                "total_time_min": None,
+                "num_stops": len(nodes),
+                "fare_class": fare_class,
+                "lines_used": list(lines_used)
             }
-        
-        # 简单的票价计算：基础票价 + 站点数 * 0.50
-        num_stops = shortest.get("num_stops", 0)
-        base_fare = 1.5
-        per_stop_fare = 0.5
-        total_cost = base_fare + (num_stops - 1) * per_stop_fare
-        
-        return {
-            "route": shortest.get("route", []),
-            "total_cost_usd": round(total_cost, 2),
-            "total_time_min": shortest.get("total_time_min", 0),
-            "num_stops": num_stops,
-            "fare_class": fare_class
-        }
-    
+
     except Exception as e:
         return {
             "origin": {"station_id": origin_id},
             "destination": {"station_id": destination_id},
             "error": f"Query failed: {str(e)}"
         }
-
 
 # ============================================================================
 # 测试函数（可选）
