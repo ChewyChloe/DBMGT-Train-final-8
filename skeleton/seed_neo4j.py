@@ -63,22 +63,15 @@ class StationData:
     name: str
     lines: List[str]
 
-
 @dataclass
 class ConnectionData:
-    """
-    连接数据模型（用于 Metro, Rail, Interchange）
-    
-    修正说明：
-    - ✅ line_id → line（符合 schema）
-    - ✅ travel_time_minutes → travel_time_min（符合 schema）
-    - ✅ 新增 connection_type（用于区分 metro/rail/interchange）
-    """
     from_station: str
     to_station: str
-    line: str  # ✅ 改名（之前是 line_id）
-    travel_time_min: int  # ✅ 改名（之前是 travel_time_minutes）
-    connection_type: str  # metro | rail | interchange
+    line: str
+    travel_time_min: int
+    connection_type: str
+    service_type: str = "local"
+    per_stop_rate_usd: float = 0.5
 
 
 # ============================================================================
@@ -373,14 +366,12 @@ class Neo4jSeeder:
         - ✅ 属性：travel_time_min, line（不是 travel_time_minutes, line_id）
         """
         print("\n🔗 Seeding Metro connections...")
-        
+                
         query = """
         MATCH (s1:MetroStation {station_id: $from_id}), 
-              (s2:MetroStation {station_id: $to_id})
-        CREATE (s1)-[r:METRO_LINK {
-            travel_time_min: $travel_time_min,
-            line: $line
-        }]->(s2)
+            (s2:MetroStation {station_id: $to_id})
+        MERGE (s1)-[r:METRO_LINK {line: $line}]->(s2)
+        SET r.travel_time_min = $travel_time_min
         """
         
         count = 0
@@ -412,11 +403,11 @@ class Neo4jSeeder:
         
         query = """
         MATCH (s1:NationalRailStation {station_id: $from_id}), 
-              (s2:NationalRailStation {station_id: $to_id})
-        CREATE (s1)-[r:RAIL_LINK {
-            travel_time_min: $travel_time_min,
-            line: $line
-        }]->(s2)
+            (s2:NationalRailStation {station_id: $to_id})
+        MERGE (s1)-[r:RAIL_LINK {line: $line}]->(s2)
+        SET r.travel_time_min = $travel_time_min,
+            r.service_type = $service_type,
+            r.per_stop_rate_usd = $per_stop_rate_usd
         """
         
         count = 0
@@ -428,7 +419,9 @@ class Neo4jSeeder:
                         from_id=conn.from_station,
                         to_id=conn.to_station,
                         travel_time_min=conn.travel_time_min,
-                        line=conn.line
+                        line=conn.line,
+                        service_type=conn.service_type,
+                        per_stop_rate_usd=conn.per_stop_rate_usd
                     )
                     count += 1
                 except Exception as e:
