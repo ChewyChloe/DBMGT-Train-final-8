@@ -38,7 +38,7 @@
 --  1. USERS
 -- ============================================================
 
--- 使用者基本資料
+-- Registered User profile data
 CREATE TABLE registered_users (
     user_id        VARCHAR(20)  PRIMARY KEY,
     email          VARCHAR(100) NOT NULL UNIQUE,
@@ -50,7 +50,7 @@ CREATE TABLE registered_users (
     is_active      BOOLEAN      NOT NULL DEFAULT TRUE
 );
 
--- 使用者認證資料（不存 email，只透過 user_id 關聯）
+-- User credentials for authentication (excludes email to avoid duplication, references registered_users)
 CREATE TABLE user_credentials (
     user_id         VARCHAR(20) PRIMARY KEY
                     REFERENCES registered_users(user_id),
@@ -68,14 +68,14 @@ CREATE TABLE user_credentials (
 --  2. STATIONS
 -- ============================================================
 
--- 捷運站基本資料
+-- Metro station basic information
 CREATE TABLE metro_stations (
     station_id  VARCHAR(20)  PRIMARY KEY,
     name        VARCHAR(100) NOT NULL,
     zone        VARCHAR(20)
 );
 
--- 捷運站所屬路線（一站可屬多線）
+-- Lines associated with metro stations (one station can belong to multiple lines)
 CREATE TABLE metro_station_lines (
     station_id  VARCHAR(20) NOT NULL
                 REFERENCES metro_stations(station_id),
@@ -83,14 +83,14 @@ CREATE TABLE metro_station_lines (
     PRIMARY KEY (station_id, line_name)
 );
 
--- 國鐵站基本資料
+-- National rail station basic information
 CREATE TABLE national_rail_stations (
     station_id  VARCHAR(20)  PRIMARY KEY,
     name        VARCHAR(100) NOT NULL,
     zone        VARCHAR(20)
 );
 
--- 國鐵站所屬路線（一站可屬多線）
+-- Lines associated with national rail stations (one station can belong to multiple lines)
 CREATE TABLE nr_station_lines (
     station_id  VARCHAR(20) NOT NULL
                 REFERENCES national_rail_stations(station_id),
@@ -103,7 +103,7 @@ CREATE TABLE nr_station_lines (
 --  3. SCHEDULES / TIMETABLE
 -- ============================================================
 
--- 捷運班次主表
+-- Metro schedules master table
 CREATE TABLE metro_schedules (
     schedule_id     VARCHAR(30) PRIMARY KEY,
     line            VARCHAR(20) NOT NULL,
@@ -118,7 +118,7 @@ CREATE TABLE metro_schedules (
     per_stop_rate_usd      NUMERIC(8,2)
 );
 
--- 捷運班次停靠站（含順序）
+-- Stops and sequence order associated with metro schedules
 CREATE TABLE metro_schedule_stops (
     schedule_id  VARCHAR(30) NOT NULL
                  REFERENCES metro_schedules(schedule_id),
@@ -129,7 +129,7 @@ CREATE TABLE metro_schedule_stops (
     PRIMARY KEY (schedule_id, stop_order)
 );
 
--- 國鐵班次主表
+-- National rail schedules master table
 CREATE TABLE nr_schedules (
     schedule_id     VARCHAR(30) PRIMARY KEY,
     line            VARCHAR(20),
@@ -144,7 +144,7 @@ CREATE TABLE nr_schedules (
     frequency_min          INTEGER
 );
 
--- 國鐵班次停靠站
+-- Stops and sequence order associated with national rail schedules
 CREATE TABLE nr_schedule_stops (
     schedule_id               VARCHAR(30) NOT NULL
                               REFERENCES nr_schedules(schedule_id),
@@ -156,7 +156,7 @@ CREATE TABLE nr_schedule_stops (
     PRIMARY KEY (schedule_id, stop_order)
 );
 
--- 國鐵票價等級
+-- Fare classes and rates for national rail schedules
 CREATE TABLE nr_schedule_fare_classes (
     schedule_id      VARCHAR(30)  NOT NULL
                      REFERENCES nr_schedules(schedule_id),
@@ -171,7 +171,7 @@ CREATE TABLE nr_schedule_fare_classes (
 --  4. SEATS
 -- ============================================================
 
--- 國鐵車廂
+-- Seat coaches assigned to national rail schedules
 CREATE TABLE nr_seat_coaches (
     schedule_id   VARCHAR(30) NOT NULL
                   REFERENCES nr_schedules(schedule_id),
@@ -180,7 +180,7 @@ CREATE TABLE nr_seat_coaches (
     PRIMARY KEY (schedule_id, coach_number)
 );
 
--- 國鐵座位
+-- Seat configuration mapping for national rail schedules
 CREATE TABLE nr_seats (
     schedule_id      VARCHAR(30) NOT NULL,
     seat_id          VARCHAR(20) NOT NULL,
@@ -196,7 +196,7 @@ CREATE TABLE nr_seats (
 --  5. BOOKINGS / TRAVEL HISTORY
 -- ============================================================
 
--- 國鐵訂票紀錄
+-- Booking records for national rail journeys
 CREATE TABLE nr_bookings (
     booking_id            VARCHAR(30) PRIMARY KEY,
     user_id               VARCHAR(20) NOT NULL
@@ -218,7 +218,7 @@ CREATE TABLE nr_bookings (
     travelled_at          TIMESTAMPTZ
 );
 
--- 捷運搭乘紀錄
+-- Journey and travel history for metro trips
 CREATE TABLE metro_travel_history (
     trip_id               VARCHAR(30) PRIMARY KEY,
     user_id               VARCHAR(20) NOT NULL
@@ -252,7 +252,7 @@ CREATE TABLE payments (
     status          VARCHAR(30)   NOT NULL DEFAULT 'paid',
     paid_at         TIMESTAMPTZ   DEFAULT NOW(),
 
-    -- 剛好一個 FK 非 NULL
+    -- Exactly one foreign key must be non-null (XOR constraint)
     CONSTRAINT chk_payments_exclusive_fk CHECK (
         (nr_booking_id IS NOT NULL AND metro_trip_id IS NULL) OR
         (nr_booking_id IS NULL     AND metro_trip_id IS NOT NULL)
@@ -276,7 +276,7 @@ CREATE TABLE feedback (
     comment         TEXT,
     submitted_at    TIMESTAMPTZ DEFAULT NOW(),
 
-    -- 剛好一個 FK 非 NULL
+    -- Exactly one foreign key must be non-null (XOR constraint)
     CONSTRAINT chk_feedback_exclusive_fk CHECK (
         (nr_booking_id IS NOT NULL AND metro_trip_id IS NULL) OR
         (nr_booking_id IS NULL     AND metro_trip_id IS NOT NULL)
