@@ -58,7 +58,7 @@ def build_documents():
         # Split cancellation_windows into individual documents
         if "cancellation_windows" in policy:
             for w in policy["cancellation_windows"]:
-                title = f"{label} - {w.get('label')}"
+                title = f"{label} - {w.get('label')} ({w.get('condition')})"
                 content = f"Policy Label: {label} (Policy ID: {policy_id}). Condition: {w.get('condition')}."
                 
                 if "status_condition" in w:
@@ -88,7 +88,7 @@ def build_documents():
         # Split compensation_rules into individual documents
         if "compensation_rules" in policy:
             for r in policy["compensation_rules"]:
-                title = f"{label} - Delay Compensation ({r.get('rule_id')})"
+                title = f"{label} - Delay Compensation ({r.get('rule_id')}) - {r.get('condition')}"
                 content = (
                     f"Policy Label: {label}. Delay Condition: {r.get('condition')}. "
                     f"Compensation Scheme: {r.get('compensation')}. How to Claim: {r.get('how_to_claim')}."
@@ -96,6 +96,24 @@ def build_documents():
                 if "exclusions" in policy:
                     content += f" Exclusions and Exemptions: {policy['exclusions']}"
                     
+                docs.append({
+                    "title": title,
+                    "category": "refund",
+                    "source_file": "refund_policy.json",
+                    "content": content,
+                })
+
+        if "maintenance_rules" in policy:
+            for m in policy["maintenance_rules"]:
+                title = f"{label} - Maintenance Disruption ({m.get('rule_id')})"
+                content = (
+                    f"Policy Label: {label}. Maintenance Condition: {m.get('condition')}. "
+                    f"Refund Policy: {m.get('refund_percent')}% refund with {m.get('admin_fee_usd', 0.0)} USD administrative fee. "
+                    f"How to Claim: {m.get('how_to_claim')}."
+                )
+                if "alternative_transport" in m:
+                    content += f" Alternative Transport: {m.get('alternative_transport')}"
+            
                 docs.append({
                     "title": title,
                     "category": "refund",
@@ -157,7 +175,7 @@ def build_documents():
     tp = _load("travel_policies.json")
     for network in ["metro", "national_rail"]:
         if network in tp:
-            network_label = "Metro Network" if network == "metro" else "National Rail Network"
+            network_label = "Metro Network" if network == "national_rail" else "Metro Network"
             # Decouples the entire network block into modular sub-topics.
             # Prevents unrelated rules from polluting the vector space and increases retrieval recall.
             for topic, details in tp[network].items():
