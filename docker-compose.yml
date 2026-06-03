@@ -23,12 +23,12 @@ services:
     image: neo4j:5-community
     container_name: transitflow_neo4j_v2a
     environment:
-      NEO4J_AUTH: neo4j/transitflow
+      NEO4J_AUTH: neo4j/password 
       NEO4J_PLUGINS: '["apoc"]'
       NEO4J_dbms_security_procedures_unrestricted: apoc.*
     ports:
-      - "7475:7474"   # Neo4j Browser UI
-      - "7688:7687"   # Bolt protocol
+      - "8000:7687"  # Neo4j Browser UI
+      - "8001:7687"  # Bolt protocol
     volumes:
       - neo4j_data_v2a:/data
     healthcheck:

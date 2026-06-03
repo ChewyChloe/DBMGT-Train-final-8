@@ -1,0 +1,31 @@
+============================================================
+Traceback (most recent call last):
+TransitFlow Neo4j Graph Database Seeder
+============================================================
+  File "C:\Users\loen7\OneDrive\Desktop\Coding\Database\transitflow\skeleton\seed_neo4j.py", line 244, in __init__
+    print("\u2713 Connected to Neo4j")
+  File "C:\users\loen7\appdata\local\programs\python\python310\lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2713' in position 0: character maps to <undefined>
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\loen7\OneDrive\Desktop\Coding\Database\transitflow\skeleton\seed_neo4j.py", line 543, in main
+    seeder = Neo4jSeeder()
+  File "C:\Users\loen7\OneDrive\Desktop\Coding\Database\transitflow\skeleton\seed_neo4j.py", line 246, in __init__
+    print(f"\u274c Failed to connect to Neo4j: {e}")
+  File "C:\users\loen7\appdata\local\programs\python\python310\lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+UnicodeEncodeError: 'charmap' codec can't encode character '\u274c' in position 0: character maps to <undefined>
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\loen7\OneDrive\Desktop\Coding\Database\transitflow\skeleton\seed_neo4j.py", line 586, in <module>
+    main()
+  File "C:\Users\loen7\OneDrive\Desktop\Coding\Database\transitflow\skeleton\seed_neo4j.py", line 576, in main
+    print(f"\n\u274c Fatal error: {e}")
+  File "C:\users\loen7\appdata\local\programs\python\python310\lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+UnicodeEncodeError: 'charmap' codec can't encode character '\u274c' in position 2: character maps to <undefined>
