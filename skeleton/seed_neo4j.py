@@ -1,17 +1,17 @@
 """
-Neo4j Graph Database Seeder for TransitFlow - 修正版本
+Neo4j Graph Database Seeder for TransitFlow - Fixed Version
 ============================================================
-作者：陳宇緹 (基于 Claude 框架 + 老师 schema 规范)
-日期：2026-05-28
+Author: Yuti Chen (Based on Claude framework + Professor's schema guidelines)
+Date: 2026-05-28
 
-符合规范：AI_SESSION_CONTEXT.md 第 6 章「Agreed Neo4j Graph Schema」
+Complies with: AI_SESSION_CONTEXT.md Chapter 6 "Agreed Neo4j Graph Schema"
 
-关键修正：
+Key Fixes:
 ✅ Node Label: Station → MetroStation / NationalRailStation
 ✅ Node Property: id → station_id
 ✅ Relationship Type: CONNECTS → METRO_LINK / RAIL_LINK / INTERCHANGE_TO
 ✅ Edge Property: travel_time_minutes → travel_time_min, line_id → line
-✅ INTERCHANGE_TO 双向建立
+✅ INTERCHANGE_TO created bidirectionally
 """
 
 import json
@@ -29,35 +29,35 @@ load_dotenv()
 # ============================================================================
 
 class Config:
-    """Neo4j 连接配置"""
+    """Neo4j Connection Configuration"""
     
     NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:8001")
     NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
     NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "transitflow2026")
     
-    # 测资路径
+    # Test data paths
     DATA_DIR = Path(__file__).parent.parent / "train-mock-data"
     METRO_STATIONS_FILE = DATA_DIR / "metro_stations.json"
     NATIONAL_STATIONS_FILE = DATA_DIR / "national_rail_stations.json"
     
-    # 清空数据库再开始
+    # Clear database before starting
     CLEAR_DB = True
 
 
 # ============================================================================
-# Data Models - 修正版本
+# Data Models - Fixed Version
 # ============================================================================
 
 @dataclass
 class StationData:
     """
-    车站数据模型
+    Station data model
     
-    修正说明：
-    - ✅ 改用 station_id（与 PostgreSQL 对应）
-    - ✅ 移除 line_type（改由 Label 区分：MetroStation vs NationalRailStation）
-    - ✅ 移除 is_active（Neo4j schema 不需要）
-    - ✅ 保留 name 和 lines
+    Fix details:
+    - ✅ Use station_id (corresponding to PostgreSQL)
+    - ✅ Remove line_type (distinguished by Label: MetroStation vs NationalRailStation)
+    - ✅ Remove is_active (not required in Neo4j schema)
+    - ✅ Retain name and lines
     """
     station_id: str
     name: str
@@ -75,27 +75,27 @@ class ConnectionData:
 
 
 # ============================================================================
-# Data Loader - 修正版本
+# Data Loader - Fixed Version
 # ============================================================================
 
 class DataLoader:
-    """从 JSON 檔案讀取測資"""
+    """Load mock data from JSON files"""
     
     @staticmethod
     def load_all_stations() -> Dict[str, StationData]:
         """
-        讀取 Metro 和 National Rail 車站
+        Load Metro and National Rail stations
         
-        修正说明：
-        - ✅ 返回统一的字典 {station_id: StationData}
-        - ✅ 使用 station_id 作为 key（不是 id）
-        - ✅ 不再区分 line_type（改由 ID 前缀判断：MS vs NR）
+        Fix details:
+        - ✅ Return a unified dictionary {station_id: StationData}
+        - ✅ Use station_id as key (not id)
+        - ✅ No longer distinguish line_type (determine by ID prefix: MS vs NR)
         """
         print("📍 Loading all stations...")
         
         stations = {}
         
-        # 讀取 Metro 車站
+        # Load Metro stations
         print("  🚇 Loading Metro stations...")
         try:
             with open(Config.METRO_STATIONS_FILE, 'r', encoding='utf-8') as f:
@@ -103,10 +103,10 @@ class DataLoader:
             
             for item in metro_data:
                 station = StationData(
-                    station_id=item['station_id'],  # ✅ 改用 station_id
+                    station_id=item['station_id'],  # ✅ Use station_id
                     name=item['name'],
                     lines=item['lines']
-                    # ✅ 移除 line_type（改由 Label 区分）
+                    # ✅ Remove line_type (distinguished by Label)
                 )
                 stations[station.station_id] = station
             
@@ -116,7 +116,7 @@ class DataLoader:
             print(f"    ❌ File not found: {Config.METRO_STATIONS_FILE}")
             return {}
         
-        # 讀取 National Rail 車站
+        # Load National Rail stations
         print("  🚄 Loading National Rail stations...")
         try:
             with open(Config.NATIONAL_STATIONS_FILE, 'r', encoding='utf-8') as f:
@@ -124,7 +124,7 @@ class DataLoader:
             
             for item in national_data:
                 station = StationData(
-                    station_id=item['station_id'],  # ✅ 改用 station_id
+                    station_id=item['station_id'],  # ✅ Use station_id
                     name=item['name'],
                     lines=item['lines']
                 )
@@ -141,12 +141,12 @@ class DataLoader:
     @staticmethod
     def load_all_connections() -> Dict[str, List[ConnectionData]]:
         """
-        從 adjacent_stations 中提取連接
+        Extract connections from adjacent_stations
         
-        修正说明：
-        - ✅ 返回字典，分离 metro/rail/interchange 三类
-        - ✅ 属性改用 line 和 travel_time_min
-        - ✅ 新增 connection_type 区分三类
+        Fix details:
+        - ✅ Return dictionary, separate metro/rail/interchange categories
+        - ✅ Use line and travel_time_min for attributes
+        - ✅ Add connection_type to distinguish the three categories
         """
         print("🔗 Loading connections from adjacent_stations...")
         
@@ -154,7 +154,7 @@ class DataLoader:
         rail_connections = []
         interchange_connections = []
         
-        # Metro 連接
+        # Metro connections
         try:
             with open(Config.METRO_STATIONS_FILE, 'r', encoding='utf-8') as f:
                 metro_data = json.load(f)
@@ -164,15 +164,15 @@ class DataLoader:
                     conn = ConnectionData(
                         from_station=station['station_id'],
                         to_station=adjacent['station_id'],
-                        line=adjacent['line'],  # ✅ 改用 line（不是 line_id）
-                        travel_time_min=adjacent['travel_time_min'],  # ✅ 改用 travel_time_min
-                        connection_type='metro'  # ✅ 新增
+                        line=adjacent['line'],  # ✅ Use line (not line_id)
+                        travel_time_min=adjacent['travel_time_min'],  # ✅ Use travel_time_min
+                        connection_type='metro'  # ✅ Added
                     )
                     metro_connections.append(conn)
         except FileNotFoundError:
             print(f"❌ File not found: {Config.METRO_STATIONS_FILE}")
         
-        # National Rail 連接
+        # National Rail connections
         try:
             with open(Config.NATIONAL_STATIONS_FILE, 'r', encoding='utf-8') as f:
                 national_data = json.load(f)
@@ -182,15 +182,15 @@ class DataLoader:
                     conn = ConnectionData(
                         from_station=station['station_id'],
                         to_station=adjacent['station_id'],
-                        line=adjacent['line'],  # ✅ 改用 line
-                        travel_time_min=adjacent['travel_time_min'],  # ✅ 改用 travel_time_min
-                        connection_type='rail'  # ✅ 新增
+                        line=adjacent['line'],  # ✅ Use line
+                        travel_time_min=adjacent['travel_time_min'],  # ✅ Use travel_time_min
+                        connection_type='rail'  # ✅ Added
                     )
                     rail_connections.append(conn)
         except FileNotFoundError:
             print(f"❌ File not found: {Config.NATIONAL_STATIONS_FILE}")
         
-        # Interchange 轉乘（從 is_interchange_national_rail 提取）
+        # Interchange transfers (extracted from is_interchange_national_rail)
         try:
             with open(Config.METRO_STATIONS_FILE, 'r', encoding='utf-8') as f:
                 metro_data = json.load(f)
@@ -200,9 +200,9 @@ class DataLoader:
                     conn = ConnectionData(
                         from_station=station['station_id'],
                         to_station=station['interchange_national_rail_station_id'],
-                        line='INTERCHANGE',  # ✅ 特殊标记
-                        travel_time_min=5,  # ✅ 假設 5 分鐘步行
-                        connection_type='interchange'  # ✅ 新增
+                        line='INTERCHANGE',  # ✅ Special marker
+                        travel_time_min=5,  # ✅ Assuming 5 minutes walk
+                        connection_type='interchange'  # ✅ Added
                     )
                     interchange_connections.append(conn)
         except FileNotFoundError:
@@ -220,20 +220,20 @@ class DataLoader:
 
 
 # ============================================================================
-# Neo4j Operations - 修正版本
+# Neo4j Operations - Fixed Version
 # ============================================================================
 
 class Neo4jSeeder:
-    """Neo4j 数据导入工具"""
+    """Neo4j data seeding tool"""
     
     def __init__(self):
-        """初始化 Neo4j 連接"""
+        """Initialize Neo4j connection"""
         try:
             self.driver = GraphDatabase.driver(
                 Config.NEO4J_URI,
                 auth=(Config.NEO4J_USERNAME, Config.NEO4J_PASSWORD)
             )
-            # 測試連接
+            # Test connection
             with self.driver.session() as session:
                 session.run("RETURN 1")
             print("✓ Connected to Neo4j")
@@ -242,12 +242,12 @@ class Neo4jSeeder:
             raise
     
     def close(self):
-        """關閉連接"""
+        """Close connection"""
         self.driver.close()
         print("✓ Disconnected from Neo4j")
     
     def clear_database(self):
-        """清空所有數據"""
+        """Clear all data"""
         print("\n🗑️  Clearing database...")
         try:
             with self.driver.session() as session:
@@ -258,19 +258,19 @@ class Neo4jSeeder:
     
     def create_indexes(self):
         """
-        建立索引
+        Create indexes
         
-        修正说明：
-        - ✅ 分别为 MetroStation 和 NationalRailStation 建索引
-        - ✅ 按 station_id 建索引
+        Fix details:
+        - ✅ Create indexes separately for MetroStation and NationalRailStation
+        - ✅ Create indexes by station_id
         """
         print("\n📑 Creating indexes...")
         queries = [
-            # MetroStation 索引
+            # MetroStation indexes
             "CREATE INDEX metro_station_id IF NOT EXISTS FOR (s:MetroStation) ON (s.station_id)",
             "CREATE INDEX metro_station_name IF NOT EXISTS FOR (s:MetroStation) ON (s.name)",
             
-            # NationalRailStation 索引
+            # NationalRailStation indexes
             "CREATE INDEX rail_station_id IF NOT EXISTS FOR (s:NationalRailStation) ON (s.station_id)",
             "CREATE INDEX rail_station_name IF NOT EXISTS FOR (s:NationalRailStation) ON (s.name)",
         ]
@@ -280,18 +280,18 @@ class Neo4jSeeder:
                 try:
                     session.run(query)
                 except:
-                    pass  # 索引可能已存在
+                    pass  # Index may already exist
         
         print("✓ Indexes created")
     
     def seed_metro_stations(self, stations: Dict[str, StationData]):
         """
-        導入 Metro 車站
+        Seed Metro stations
         
-        修正说明：
-        - ✅ Label: MetroStation（不是 Station）
-        - ✅ 属性：station_id, name, lines（不是 id, line_type 等）
-        - ✅ 只导入 MS 开头的车站
+        Fix details:
+        - ✅ Label: MetroStation (not Station)
+        - ✅ Attributes: station_id, name, lines (not id, line_type, etc.)
+        - ✅ Only seed stations starting with MS
         """
         print("\n📍 Seeding Metro stations...")
         
@@ -306,7 +306,7 @@ class Neo4jSeeder:
         count = 0
         with self.driver.session() as session:
             for station in stations.values():
-                # ✅ 用 ID 前缀判断（MS = Metro）
+                # ✅ Determine by ID prefix (MS = Metro)
                 if station.station_id.startswith('MS'):
                     try:
                         session.run(
@@ -323,11 +323,11 @@ class Neo4jSeeder:
     
     def seed_national_rail_stations(self, stations: Dict[str, StationData]):
         """
-        導入 National Rail 車站
+        Seed National Rail stations
         
-        修正说明：
-        - ✅ Label: NationalRailStation（不是 Station）
-        - ✅ 只导入 NR 开头的车站
+        Fix details:
+        - ✅ Label: NationalRailStation (not Station)
+        - ✅ Only seed stations starting with NR
         """
         print("\n📍 Seeding National Rail stations...")
         
@@ -342,7 +342,7 @@ class Neo4jSeeder:
         count = 0
         with self.driver.session() as session:
             for station in stations.values():
-                # ✅ 用 ID 前缀判断（NR = National Rail）
+                # ✅ Determine by ID prefix (NR = National Rail)
                 if station.station_id.startswith('NR'):
                     try:
                         session.run(
@@ -359,11 +359,11 @@ class Neo4jSeeder:
     
     def seed_metro_connections(self, metro_connections: List[ConnectionData]):
         """
-        導入 Metro 內部連接
+        Seed internal Metro connections
         
-        修正说明：
-        - ✅ Relationship: METRO_LINK（不是 CONNECTS）
-        - ✅ 属性：travel_time_min, line（不是 travel_time_minutes, line_id）
+        Fix details:
+        - ✅ Relationship: METRO_LINK (not CONNECTS)
+        - ✅ Attributes: travel_time_min, line (not travel_time_minutes, line_id)
         """
         print("\n🔗 Seeding Metro connections...")
                 
@@ -393,11 +393,11 @@ class Neo4jSeeder:
     
     def seed_rail_connections(self, rail_connections: List[ConnectionData]):
         """
-        導入 National Rail 內部連接
+        Seed internal National Rail connections
         
-        修正说明：
-        - ✅ Relationship: RAIL_LINK（不是 CONNECTS）
-        - ✅ 属性：travel_time_min, line
+        Fix details:
+        - ✅ Relationship: RAIL_LINK (not CONNECTS)
+        - ✅ Attributes: travel_time_min, line
         """
         print("\n🔗 Seeding Rail connections...")
         
@@ -431,12 +431,12 @@ class Neo4jSeeder:
     
     def seed_interchanges(self, interchange_connections: List[ConnectionData]):
         """
-        導入轉乘連接（雙向）
+        Seed interchange connections (bidirectional)
         
-        修正说明：
-        - ✅ Relationship: INTERCHANGE_TO（不是 TRANSFER）
-        - ✅ 必須雙向建立（metro ↔ rail）
-        - ✅ 属性：travel_time_min（表示步行时间）
+        Fix details:
+        - ✅ Relationship: INTERCHANGE_TO (not TRANSFER)
+        - ✅ Must be bidirectional (metro ↔ rail)
+        - ✅ Attribute: travel_time_min (represents walk time)
         """
         print("\n🔄 Seeding interchange relationships...")
         
@@ -449,7 +449,7 @@ class Neo4jSeeder:
         }]->(nr)
         """
         
-        # National Rail → Metro（反向）
+        # National Rail → Metro (reverse)
         query2 = """
         MATCH (nr:NationalRailStation {station_id: $from_id}), 
               (ms:MetroStation {station_id: $to_id})
@@ -462,7 +462,7 @@ class Neo4jSeeder:
         with self.driver.session() as session:
             for conn in interchange_connections:
                 try:
-                    # ✅ 建立兩個方向
+                    # ✅ Create both directions
                     session.run(
                         query1,
                         from_id=conn.from_station,
@@ -483,17 +483,17 @@ class Neo4jSeeder:
     
     def get_stats(self):
         """
-        獲取數據庫統計信息
+        Get database statistics
         
-        修正说明：
-        - ✅ 分别统计 MetroStation 和 NationalRailStation
-        - ✅ 统计三种关系：METRO_LINK, RAIL_LINK, INTERCHANGE_TO
+        Fix details:
+        - ✅ Count MetroStation and NationalRailStation separately
+        - ✅ Count three relationships: METRO_LINK, RAIL_LINK, INTERCHANGE_TO
         """
         print("\n📊 Database Statistics:")
         
         try:
             with self.driver.session() as session:
-                # 车站统计
+                # Station statistics
                 metro_stations = session.run(
                     "MATCH (s:MetroStation) RETURN count(s) as count"
                 ).single()[0]
@@ -501,7 +501,7 @@ class Neo4jSeeder:
                     "MATCH (s:NationalRailStation) RETURN count(s) as count"
                 ).single()[0]
                 
-                # 关系统计
+                # Relationship statistics
                 metro_links = session.run(
                     "MATCH ()-[r:METRO_LINK]->() RETURN count(r) as count"
                 ).single()[0]
@@ -526,7 +526,7 @@ class Neo4jSeeder:
 # ============================================================================
 
 def main():
-    """主程式流程"""
+    """Main program flow"""
     print("=" * 60)
     print("TransitFlow Neo4j Graph Database Seeder")
     print("=" * 60)
@@ -534,17 +534,17 @@ def main():
     seeder = None
     
     try:
-        # 初始化
+        # Initialize
         seeder = Neo4jSeeder()
         
-        # 清空數據庫
+        # Clear database
         if Config.CLEAR_DB:
             seeder.clear_database()
         
-        # 建立索引
+        # Create indexes
         seeder.create_indexes()
         
-        # 讀取測資
+        # Load mock data
         print("\n📂 Loading data...")
         stations = DataLoader.load_all_stations()
         connections_dict = DataLoader.load_all_connections()
@@ -553,14 +553,14 @@ def main():
             print("❌ No stations loaded. Exiting.")
             return
         
-        # 導入數據
+        # Seed data
         seeder.seed_metro_stations(stations)
         seeder.seed_national_rail_stations(stations)
         seeder.seed_metro_connections(connections_dict['metro'])
         seeder.seed_rail_connections(connections_dict['rail'])
         seeder.seed_interchanges(connections_dict['interchange'])
         
-        # 顯示統計
+        # Display statistics
         seeder.get_stats()
         
         print("\n" + "=" * 60)
