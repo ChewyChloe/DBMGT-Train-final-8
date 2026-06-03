@@ -54,11 +54,24 @@ def insert_many(cur, table, columns, rows):
 
 
 def _hash_password(plaintext):
-    """Hash a plaintext password using SHA-256.
+    """Hash a plaintext password using PBKDF2-HMAC-SHA256 with a random salt.
 
-    This is for teaching/demo only. Production should use argon2 or bcrypt.
+    Format: pbkdf2_sha256$<iterations>$<salt_hex>$<hash_hex>
+
+    Why PBKDF2 over plain SHA-256:
+      - PBKDF2 applies key stretching (100,000 iterations), making brute-force
+        attacks orders of magnitude slower than a single SHA-256 round.
+      - A per-user random salt (os.urandom) defeats pre-computed rainbow-table
+        attacks: two users with the same password get different hashes.
+      - PBKDF2 is NIST-approved (SP 800-132) and available in the Python
+        standard library — no extra packages required.
     """
-    return hashlib.sha256(plaintext.encode("utf-8")).hexdigest()
+    iterations = 100_000
+    salt = os.urandom(16)
+    dk = hashlib.pbkdf2_hmac(
+        "sha256", plaintext.encode("utf-8"), salt, iterations
+    )
+    return f"pbkdf2_sha256${iterations}${salt.hex()}${dk.hex()}"
 
 
 def _split_full_name(full_name):
