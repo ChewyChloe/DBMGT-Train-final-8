@@ -7,6 +7,32 @@
 --    2. Vector      → policy documents for RAG (provided — do not modify)
 -- ============================================================
 
+-- ────────────────────────────────────────────────────────────────
+-- PK DESIGN DECISION:
+-- All tables use VARCHAR business keys (e.g. RU01, MS01, NR01, BK001)
+-- rather than UUID or SERIAL.
+-- Rationale:
+--   1. Mock-data JSON files and Neo4j graph use these IDs directly —
+--      a stable business key avoids an extra mapping layer across DBs.
+--   2. Human-readable IDs simplify debugging and grading demos.
+--   3. For a single-region teaching project, the join-performance
+--      advantage of SERIAL/BIGINT is negligible.
+-- Production recommendation: UUID v7 or BIGSERIAL for scalability.
+-- ────────────────────────────────────────────────────────────────
+-- DELETE STRATEGY:
+-- Bookings use SOFT CANCELLATION (status = 'cancelled') — rows are
+-- never physically deleted.  This preserves full audit history and
+-- allows accurate refund tracking.  Other reference tables (stations,
+-- schedules, users) hold immutable seed data and are never removed.
+-- ────────────────────────────────────────────────────────────────
+-- FK CASCADE POLICY:
+-- All foreign keys use PostgreSQL default NO ACTION (equivalent to
+-- RESTRICT at transaction end).  Parent-row deletion is controlled
+-- entirely at the application layer: the app checks references and
+-- performs soft cancellation before any removal.  In production,
+-- explicit ON DELETE RESTRICT or SET NULL would be specified per FK.
+-- ────────────────────────────────────────────────────────────────
+
 
 -- ============================================================
 --  1. USERS
@@ -28,6 +54,10 @@ CREATE TABLE registered_users (
 CREATE TABLE user_credentials (
     user_id         VARCHAR(20) PRIMARY KEY
                     REFERENCES registered_users(user_id),
+    -- PBKDF2-HMAC-SHA256 hash with per-user random salt.
+    -- Format: pbkdf2_sha256$iterations$salt_hex$hash_hex
+    -- Why: key stretching (100k rounds) + unique salt per user prevents
+    -- both brute-force and rainbow-table attacks, unlike plain SHA-256.
     password_hash   TEXT        NOT NULL,
     secret_question TEXT,
     secret_answer   TEXT
