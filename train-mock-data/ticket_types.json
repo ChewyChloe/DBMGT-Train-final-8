@@ -73,5 +73,30 @@
       "refund_rule": "RF004",
       "notes": "A day pass offers better value than individual single tickets for passengers making 3 or more metro trips in a day. Tap in and out normally at each station."
     }
+  },
+  {
+    "ticket_type": "monthly_pass",
+    "display_name": "30-Day Commuter Pass",
+    "available_on": ["metro", "national_rail"],
+    "description": "Unlimited travel within specified zones for 30 consecutive days from the date of activation. Ideal for daily commuters.",
+    "metro": {
+      "pricing_model": "flat_rate_pass",
+      "price_usd": 45.00,
+      "validity": "30 consecutive calendar days including the date of first tap-in. Valid across all metro lines.",
+      "unlimited_journeys": true,
+      "changes_allowed": false,
+      "refundable": true,
+      "refund_rule": "Non-refundable once activated. Unactivated passes can be refunded for a 100% refund with no admin fee."
+    },
+    "national_rail": {
+      "pricing_model": "zone_based_pass",
+      "price_usd": 90.00,
+      "fare_classes": ["standard"],
+      "validity": "30 consecutive calendar days for a specific origin-destination route. Valid on normal services only; not valid on express services.",
+      "seat_assignment": false,
+      "changes_allowed": false,
+      "refundable": true,
+      "refund_rule": "Pro-rata refund available for unexpired days minus a $5.00 administrative fee, requested via ticket counters only."
+    }
   }
 ]

@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "last_updated": "2024-01-01",
+  "last_updated": "2026-06-01",
   "metro": {
     "bicycles": {
       "foldable_bicycles": {
@@ -56,7 +56,8 @@
       "Items emitting strong odours that may cause discomfort to other passengers"
     ],
     "smoking_and_vaping": "Strictly prohibited on all metro carriages, platforms, and station concourses.",
-    "noise": "Passengers are asked to keep noise to a considerate level. Use of personal audio devices with external speakers is not permitted."
+    "noise": "Passengers are asked to keep noise to a considerate level. Use of personal audio devices with external speakers is not permitted.",
+    "lost_and_found": "Items found on metro services or stations will be kept at the Central Lost Property Office for up to 30 days. Passengers can file a claim online via the app. Unclaimed items after 30 days will be disposed of or donated to charity."
   },
   "national_rail": {
     "bicycles": {
@@ -132,6 +133,7 @@
       "Items emitting strong odours that may cause discomfort to other passengers"
     ],
     "smoking_and_vaping": "Strictly prohibited on all train carriages and at all station platforms.",
-    "conduct": "Passengers behaving in a manner that causes distress or danger to other passengers or staff may be removed from the train. In serious cases, the operator reserves the right to involve law enforcement."
+    "conduct": "Passengers behaving in a manner that causes distress or danger to other passengers or staff may be removed from the train. In serious cases, the operator reserves the right to involve law enforcement.",
+    "charging_stations": "Power sockets (110V AC) and USB charging ports are available at every seat in First Class coaches free of charge. In Standard Class, charging sockets are available on selected newer train models only, located beneath the window armrests."
   }
 }
