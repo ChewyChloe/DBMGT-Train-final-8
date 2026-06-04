@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "last_updated": "2026-06-01",
+  "last_updated": "2026-06-03",
   "metro": {
     "bicycles": {
       "foldable_bicycles": {
@@ -8,41 +8,41 @@
         "max_folded_dimensions_cm": "90 × 45 × 30",
         "peak_hour_restriction": true,
         "peak_hours": "07:00–09:30 and 17:00–20:00, Monday to Friday",
-        "peak_hour_rule": "Foldable bicycles are NOT permitted during peak hours even if folded.",
+        "peak_hour_rule": "CRITICAL BAN: Foldable bicycles are STRICTLY PROHIBITED and NOT permitted during peak hours (07:00–09:30 and 17:00–20:00, Monday to Friday), even if they are completely folded.",
         "fee": 0.00,
         "placement": "Passenger is responsible for keeping the bicycle with them and must not block aisles or doors."
       },
       "standard_bicycles": {
         "permitted": false,
-        "reason": "Standard (non-foldable) bicycles are not permitted on the metro at any time."
+        "reason": "STRICT BAN: Standard (non-foldable) bicycles are completely prohibited and NOT permitted on the metro at any time, under any circumstances."
       },
       "electric_scooters": {
         "permitted": false,
-        "reason": "E-scooters and hoverboards are prohibited on all metro services due to fire safety regulations, even if folded or switched off."
+        "reason": "SAFETY BAN: E-scooters and hoverboards are strictly prohibited on all metro services due to fire safety regulations, even if folded or switched off."
       }
     },
     "luggage": {
       "items_per_passenger": 2,
       "max_dimensions_per_item_cm": "70 × 50 × 30",
       "oversized_peak_restriction": true,
-      "oversized_peak_rule": "Items exceeding the size limit are not permitted during peak hours (07:00–09:30 and 17:00–20:00 weekdays).",
+      "oversized_peak_rule": "Oversized luggage exceeding the size limit is STRICTLY PROHIBITED and NOT permitted during peak hours (07:00–09:30 and 17:00–20:00 weekdays).",
       "placement": "All luggage must be held by the passenger or placed in the luggage area at the ends of the carriage. Luggage must not block seats, aisles, or doors."
     },
     "pets": {
       "permitted": true,
-      "conditions": "Small pets in fully enclosed hard or soft carriers only.",
+      "conditions": "Allowed ONLY in fully enclosed hard or soft carriers.",
       "max_carrier_dimensions_cm": "50 × 35 × 25",
       "fee": 0.00,
-      "seat_occupancy": "Pets must not occupy a seat.",
+      "seat_occupancy": "Pets must remain inside carriers and must not occupy a seat.",
       "exceptions": "Guide dogs and registered assistance animals are permitted at all times without a carrier.",
-      "prohibited": "Dogs not in carriers are not permitted on the metro, including on leads."
+      "prohibited": "STRICT BAN: Dogs not in carriers are completely prohibited on the metro, including on leads."
     },
     "food_and_drink": {
       "sealed_drinks": "permitted",
       "hot_food": "not permitted",
       "strong_smelling_food": "not permitted",
       "eating": "Eating is discouraged on the metro. Passengers must not leave litter.",
-      "alcohol": "Alcohol consumption is not permitted on metro services or at stations."
+      "alcohol": "Alcohol consumption is strictly prohibited on metro services or at stations."
     },
     "priority_seating": {
       "description": "Seats marked with a yellow priority sign are reserved for elderly passengers (65+), pregnant women, passengers with disabilities, and passengers travelling with young children.",
@@ -57,7 +57,18 @@
     ],
     "smoking_and_vaping": "Strictly prohibited on all metro carriages, platforms, and station concourses.",
     "noise": "Passengers are asked to keep noise to a considerate level. Use of personal audio devices with external speakers is not permitted.",
-    "lost_and_found": "Items found on metro services or stations will be kept at the Central Lost Property Office for up to 30 days. Passengers can file a claim online via the app. Unclaimed items after 30 days will be disposed of or donated to charity."
+    "lost_and_found": "Items found on metro services or stations will be kept at the Central Lost Property Office for up to 30 days. Passengers can file a claim online via the app. Unclaimed items after 30 days will be disposed of or donated to charity.",
+    "penalties": {
+      "fare_evasion_no_ticket": "FINES AND PENALTIES FOR NO TICKET: Travelling on the metro without a valid ticket or failing to tap in will result in an immediate penalty fare fine of 50.00 USD.",
+      "fare_evasion_incorrect_ticket": "FINES AND PENALTIES FOR CONCESSION FRAUD: Passengers found using a discounted or concession ticket (e.g., half-fare child ticket) without proper eligibility or proof of age will be charged the maximum single fare plus an administrative penalty fine of 30.00 USD.",
+      "prohibited_items_violation": "FINES AND PENALTIES FOR ILLEGAL ITEMS: Bringing prohibited items (such as weapons, flammable materials, or e-scooters) onto metro property will result in immediate confiscation, removal from the network, and a fine of up to 200.00 USD.",
+      "disruptive_behavior_and_fighting": "FINES AND PENALTIES FOR VIOLENCE: Physical fighting, verbal abuse, or behavior causing distress to passengers or staff is strictly forbidden. Violators will be removed from the train immediately, banned from the network, and subject to a fine of 500.00 USD and referral to law enforcement."
+    },
+    "medical_assistance": {
+      "emergency_on_board": "EMERGENCY PROCEDURES ON TRAIN: If you feel unwell while inside a moving metro carriage, you must immediately press the Emergency Intercom button located next to any train door to alert the driver.",
+      "emergency_at_station": "EMERGENCY PROCEDURES AT STATION: If you are at a station platform or concourse, please approach the nearest station staff or go to the Information Counter immediately.",
+      "medical_response": "MEDICAL PROTOCOL: Station control will arrange for first-aid trained personnel or emergency medical services (EMS) to meet the train at the next station to provide medical attention."
+    }
   },
   "national_rail": {
     "bicycles": {
@@ -70,17 +81,17 @@
       },
       "standard_bicycles": {
         "permitted": true,
-        "conditions": "Standard bicycles are permitted in designated bicycle bays only. Maximum 2 bicycles per train.",
+        "conditions": "Allowed ONLY in designated bicycle bays under non-peak hours. Maximum 2 bicycles per train.",
         "peak_hour_restriction": true,
         "peak_hours": "07:00–09:30 and 16:30–19:00, Monday to Friday",
-        "peak_hour_rule": "Standard bicycles are NOT permitted on national rail services during peak hours.",
+        "peak_hour_rule": "CRITICAL BAN: Standard (non-foldable) bicycles are STRICTLY PROHIBITED and NOT permitted on national rail services during peak hours (07:00–09:30 and 16:30–19:00, Monday to Friday). Only off-peak travel is allowed.",
         "fee_usd": 2.00,
         "booking": "Bicycle spaces are first-come-first-served and cannot be reserved in advance. Fee is payable at the platform bicycle bay gate.",
         "placement": "Bicycles must be placed in the designated bicycle bay. Passengers remain responsible for their bicycle."
       },
       "electric_scooters": {
         "permitted": false,
-        "reason": "E-scooters and hoverboards are not permitted on national rail services."
+        "reason": "SAFETY BAN: E-scooters and hoverboards are not permitted on national rail services at any time."
       }
     },
     "luggage": {
@@ -115,7 +126,7 @@
       "available": true,
       "description": "Selected standard class carriages are designated quiet zones. Phone calls, loud music, and disruptive noise are not permitted in quiet zones.",
       "identification": "Quiet zone carriages are marked with a quiet zone symbol on the door and inside the carriage.",
-      "rule": "Passengers should check carriage markings before boarding if a quiet journey is preferred."
+      "rule": "Passengers should check carriage markings before boarding if a journey is preferred."
     },
     "priority_seating": {
       "description": "Dedicated priority seats are available in all coaches, marked with a blue priority sign.",
@@ -134,6 +145,17 @@
     ],
     "smoking_and_vaping": "Strictly prohibited on all train carriages and at all station platforms.",
     "conduct": "Passengers behaving in a manner that causes distress or danger to other passengers or staff may be removed from the train. In serious cases, the operator reserves the right to involve law enforcement.",
-    "charging_stations": "Power sockets (110V AC) and USB charging ports are available at every seat in First Class coaches free of charge. In Standard Class, charging sockets are available on selected newer train models only, located beneath the window armrests."
+    "charging_stations": "Power sockets (110V AC) and USB charging ports are available at every seat in First Class coaches free of charge. In Standard Class, charging sockets are available on selected newer train models only, located beneath the window armrests.",
+    "penalties": {
+      "fare_evasion_no_ticket": "FINES AND PENALTIES FOR NO TICKET: Boarding a national rail train without a valid ticket or failing to present a ticket upon inspection will result in an immediate penalty fare fine of 100.00 USD or twice the standard full fare, whichever is higher.",
+      "fare_evasion_incorrect_ticket": "FINES AND PENALTIES FOR CLASS/FARE FRAUD: Passengers riding with an invalid ticket class (e.g., sitting in First Class with a Standard Class ticket) or an unauthorized concession fare will be required to pay the full fare difference on the spot plus an additional penalty fee fine of 50.00 USD.",
+      "prohibited_items_violation": "FINES AND PENALTIES FOR ILLEGAL ITEMS: Carrying illegal or prohibited items on national rail trains is a violation of transport safety rules. Offending items will be seized immediately, and the passenger will face removal at the next station and a legal fine of 250.00 USD.",
+      "disruptive_behavior_and_fighting": "FINES AND PENALTIES FOR VIOLENCE: Any form of physical confrontation, violence, or fighting on board national rail services will lead to immediate intervention by train security, ejection at the nearest station, a fine of 500.00 USD, and immediate hand-over to transit law enforcement."
+    },
+    "medical_assistance": {
+      "emergency_on_board": "EMERGENCY PROCEDURES ON TRAIN: If you feel unwell during your journey, please notify the onboard train conductor or refreshment trolley staff immediately, or ask a fellow passenger to alert them.",
+      "emergency_button": "EMERGENCY PROCEDURES BUTTON: On newer train models, you can also press the Assistance Button located inside the accessible toilets or near the wheelchair spaces.",
+      "medical_response": "MEDICAL PROTOCOL: The onboard crew will provide basic first aid and, if necessary, coordinate with network control to arrange for an ambulance to meet you at the upcoming station."
+    }
   }
 }

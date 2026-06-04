@@ -45,6 +45,16 @@
         "admin_fee_usd": 0.00
       }
     ],
+    "maintenance_rules": [
+      {
+        "rule_id": "RF001_M1",
+        "condition": "National rail service suspended or disrupted due to scheduled track maintenance or emergency rail repairs.",
+        "refund_percent": 100,
+        "admin_fee_usd": 0.00,
+        "how_to_claim": "Automatic full refund issued to digital tickets within 7 business days. Paper tickets can be refunded in full at any rail station ticket window within 30 days.",
+        "alternative_transport": "Complimentary rail replacement shuttle buses will be arranged between affected terminal stations."
+      }
+    ],
     "return_ticket_notes": "For return tickets, each leg is assessed independently. If the outbound leg has already been travelled, only the return leg amount is eligible for refund, assessed against the return departure time.",
     "no_show_policy": "Passengers who do not travel and do not cancel in advance are treated as a no-show. No refund is issued for no-shows."
   },
@@ -85,6 +95,16 @@
         "admin_fee_usd": 0.00
       }
     ],
+    "maintenance_rules": [
+      {
+        "rule_id": "RF002_M1",
+        "condition": "Express rail service cancelled or heavily disrupted due to infrastructure maintenance or power line repairs.",
+        "refund_percent": 100,
+        "admin_fee_usd": 0.00,
+        "how_to_claim": "Full refund processed automatically via the booking account. Customers can also opt to rebook onto the next available normal service free of charge.",
+        "alternative_transport": "Express coach services or valid transfer to parallel normal routes will be offered at no extra cost."
+      }
+    ],
     "return_ticket_notes": "Same as normal service: each leg assessed independently against its own departure time.",
     "no_show_policy": "No refund issued for no-shows on express services."
   },
@@ -113,6 +133,16 @@
         "admin_fee_usd": 0.00
       }
     ],
+    "maintenance_rules": [
+      {
+        "rule_id": "RF003_M1",
+        "condition": "Metro line closure or station shutdown caused by planned engineering works or emergency system maintenance.",
+        "refund_percent": 100,
+        "admin_fee_usd": 0.00,
+        "how_to_claim": "Unused digital single tickets can be fully refunded via the app instantly. For physical tokens or active tap-ins caught in a service suspension, a free exit token or station customer service refund will be provided.",
+        "alternative_transport": "Parallel street-level shuttle bus services will operate continuously during the maintenance window."
+      }
+    ],
     "notes": "Metro single tickets are valid on the travel date only. A booking with status 'cancelled' is already cancelled and no further refund action is needed."
   },
   {
@@ -138,6 +168,16 @@
         "status_condition": "Booking status is 'completed' or travelled_at is not null",
         "refund_percent": 0,
         "admin_fee_usd": 0.00
+      }
+    ],
+    "maintenance_rules": [
+      {
+        "rule_id": "RF004_M1",
+        "condition": "Severe metro network disruption due to planned track maintenance affecting multiple lines on the validity date.",
+        "refund_percent": 100,
+        "admin_fee_usd": 0.00,
+        "how_to_claim": "If the day pass remains completely unactivated due to the maintenance, a 100% full refund can be requested through customer support within 14 days.",
+        "alternative_transport": "Day pass holders gain free access to all designated emergency transit bus bridges and replacement shuttles."
       }
     ],
     "notes": "Day passes are non-transferable and valid only for the calendar day of purchase."
