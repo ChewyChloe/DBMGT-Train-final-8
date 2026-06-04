@@ -255,7 +255,8 @@ def query_alternative_routes(
 ) -> List[Dict]:
     """
     Query alternative routes when a station is closed.
-    Uses Dijkstra algorithm excluding the specified station.
+    Finds all paths avoiding the specified station,
+    ordered by total travel time.
 
     Args:
         origin_id: Origin station ID
@@ -266,16 +267,16 @@ def query_alternative_routes(
     try:
         with driver.session() as session:
             result = session.run("""
-                MATCH (origin {station_id: $origin_id})
-                MATCH (destination {station_id: $destination_id})
-                MATCH (avoid {station_id: $avoid_station_id})
-                CALL apoc.algo.dijkstra(origin, destination,
-                    'METRO_LINK|RAIL_LINK|INTERCHANGE_TO',
-                    'travel_time_min')
-                YIELD path, weight
-                WHERE none(n IN nodes(path) WHERE n.station_id = $avoid_station_id)
-                RETURN path, weight
+                MATCH path = (origin)-[*1..8]-(destination)
+                WHERE origin.station_id = $origin_id
+                AND destination.station_id = $destination_id
+                AND none(n IN nodes(path) WHERE n.station_id = $avoid_station_id)
+                AND none(n IN nodes(path) WHERE n.station_id = $origin_id AND n <> origin)
+                WITH path,
+                    reduce(t=0, r IN relationships(path) | t + r.travel_time_min) AS total_time
+                ORDER BY total_time
                 LIMIT $max_routes
+                RETURN path, total_time
             """,
             origin_id=origin_id,
             destination_id=destination_id,
@@ -291,7 +292,7 @@ def query_alternative_routes(
 
             for rank, record in enumerate(records, 1):
                 path = record.get("path")
-                total_time = record.get("weight", 0)
+                total_time = record.get("total_time", 0)
                 nodes = list(path.nodes)
                 relationships = list(path.relationships)
 
@@ -311,7 +312,7 @@ def query_alternative_routes(
                 alternatives.append({
                     "rank": rank,
                     "route": route,
-                    "total_time_min": int(total_time),
+                    "total_time_min": int(total_time) if total_time else 0,
                     "num_stops": len(nodes),
                     "lines_used": list(lines_used),
                     "avoided_station": avoid_station_id
@@ -321,7 +322,7 @@ def query_alternative_routes(
 
     except Exception as e:
         return [{"error": f"Query failed: {str(e)}"}]
-
+        
 
 # ============================================================================
 # 5. query_interchange_path() - Query cross-system interchange route
