@@ -252,13 +252,16 @@ def query_alternative_routes(
     try:
         with driver.session() as session:
             result = session.run("""
-                MATCH path = (origin)-[*1..8]-(destination)
+                MATCH path = (origin)-[*1..8]->(destination)
                 WHERE origin.station_id = $origin_id
                 AND destination.station_id = $destination_id
                 AND none(n IN nodes(path) WHERE n.station_id = $avoid_station_id)
-                AND none(n IN nodes(path) WHERE n.station_id = $origin_id AND n <> origin)
                 WITH path,
-                    reduce(t=0, r IN relationships(path) | t + r.travel_time_min) AS total_time
+                    reduce(t=0, r IN relationships(path) | t + r.travel_time_min) AS total_time,
+                    [n IN nodes(path) | n.station_id] AS station_ids
+                WITH path, total_time, station_ids
+                WHERE size(apoc.coll.toSet(station_ids)) = size(station_ids)
+                WITH DISTINCT station_ids, total_time, path
                 ORDER BY total_time
                 LIMIT $max_routes
                 RETURN path, total_time
@@ -345,7 +348,7 @@ def query_interchange_path(origin_id: str, destination_id: str) -> Dict:
             metro_part = []
             rail_part = []
             interchange_info = None
-            current_part = "metro"
+            current_part = "rail" if origin_id.startswith("NR") else "metro"
 
             for i, node in enumerate(nodes):
                 station = {
