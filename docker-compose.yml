@@ -23,7 +23,7 @@ services:
     image: neo4j:5-community
     container_name: transitflow_neo4j_v2a
     environment:
-      NEO4J_AUTH: neo4j/password 
+      NEO4J_AUTH: neo4j/transitflow 
       NEO4J_PLUGINS: '["apoc"]'
       NEO4J_dbms_security_procedures_unrestricted: apoc.*
     ports:
