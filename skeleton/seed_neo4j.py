@@ -367,7 +367,7 @@ class Neo4jSeeder:
             (s2:MetroStation {station_id: $to_id})
         MERGE (s1)-[r:METRO_LINK {line: $line}]->(s2)
         SET r.travel_time_min = $travel_time_min,
-            r.per_stop_rate_usd = 0.0
+            r.per_stop_rate_usd = 0.5
         """
 
         count = 0
@@ -443,7 +443,7 @@ class Neo4jSeeder:
         MATCH (nr:NationalRailStation {station_id: $from_id}), 
             (ms:MetroStation {station_id: $to_id})
         MERGE (nr)-[r:INTERCHANGE_TO {travel_time_min: $travel_time_min}]->(ms)
-        SET r.per_stop_rate_usd = 0.0
+        SET r.per_stop_rate_usd = 0.5
         """
 
         count = 0
