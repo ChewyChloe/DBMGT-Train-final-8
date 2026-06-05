@@ -27,7 +27,7 @@ load_dotenv()
 # Read configuration
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:8001")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "transitflow2026")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "transitflow")
 
 # Create driver
 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
