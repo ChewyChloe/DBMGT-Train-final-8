@@ -102,6 +102,7 @@ def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> List[Dict]:
     """
     Query which stations are affected when a given station is delayed.
     Uses APOC subgraphNodes to expand outward from the delayed station.
+    Includes the delayed station itself and hops_away for each affected station.
 
     Args:
         delayed_station_id: ID of the delayed station (e.g. "MS05")
@@ -116,13 +117,19 @@ def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> List[Dict]:
                     relationshipFilter: 'METRO_LINK|RAIL_LINK'
                 })
                 YIELD node
-                WITH node
-                WHERE node.station_id <> $delayed_station
+                WITH center, node
+                OPTIONAL MATCH path = shortestPath((center)-[:METRO_LINK|RAIL_LINK*]-(node))
+                WHERE center.station_id <> node.station_id
+                WITH node,
+                    CASE WHEN center.station_id = node.station_id THEN 0
+                        ELSE length(path)
+                    END as hops_away
                 RETURN
                     node.station_id as station_id,
                     node.name as station_name,
-                    node.lines as lines
-                ORDER BY station_id
+                    node.lines as lines,
+                    hops_away
+                ORDER BY hops_away, station_id
             """, delayed_station=delayed_station_id, hops=hops)
 
             records = list(result)
@@ -132,7 +139,8 @@ def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> List[Dict]:
                 affected_stations.append({
                     "station_id": record.get("station_id"),
                     "station_name": record.get("station_name"),
-                    "affected_lines": record.get("lines", [])
+                    "affected_lines": record.get("lines", []),
+                    "hops_away": record.get("hops_away", 0)
                 })
 
             return affected_stations
