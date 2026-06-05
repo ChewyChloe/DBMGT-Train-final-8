@@ -32,7 +32,7 @@ driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
 # 1. query_station_connections() - Query all connections of a station
 # ============================================================================
 
-def query_station_connections(station_id: str) -> Dict:
+def query_station_connections(station_id: str) -> List[Dict]:
     """
     Query all connections of a given station.
 
@@ -40,20 +40,15 @@ def query_station_connections(station_id: str) -> Dict:
         station_id: Station ID (e.g. "MS01")
 
     Returns:
-        {
-            "station_id": "MS01",
-            "station_name": "Central Square",
-            "connections": [
-                {
-                    "to_station_id": "MS02",
-                    "to_station_name": "Station 2",
-                    "line": "M1",
-                    "travel_time_min": 3,
-                    "type": "metro"
-                }
-            ],
-            "total_connections": 1
-        }
+        [
+            {
+                "to_station_id": "MS02",
+                "to_station_name": "Station 2",
+                "line": "M1",
+                "travel_time_min": 3,
+                "type": "metro"
+            }
+        ]
     """
     try:
         with driver.session() as session:
@@ -61,8 +56,6 @@ def query_station_connections(station_id: str) -> Dict:
                 MATCH (s)-[r]->(connected)
                 WHERE s.station_id = $station_id
                 RETURN 
-                    s.station_id as station_id,
-                    s.name as station_name,
                     connected.station_id as to_station_id,
                     connected.name as to_station_name,
                     r.line as line,
@@ -73,15 +66,8 @@ def query_station_connections(station_id: str) -> Dict:
             records = list(result)
 
             if not records:
-                return {
-                    "station_id": station_id,
-                    "station_name": "Unknown",
-                    "connections": [],
-                    "total_connections": 0,
-                    "error": "Station not found"
-                }
+                return []
 
-            station_data = records[0]
             connections = []
 
             for record in records:
@@ -103,19 +89,10 @@ def query_station_connections(station_id: str) -> Dict:
                     "type": conn_type
                 })
 
-            return {
-                "station_id": station_data.get("station_id"),
-                "station_name": station_data.get("station_name"),
-                "connections": connections,
-                "total_connections": len(connections)
-            }
+            return connections
 
     except Exception as e:
-        return {
-            "station_id": station_id,
-            "error": f"Query failed: {str(e)}"
-        }
-
+        return [{"error": f"Query failed: {str(e)}"}]
 
 # ============================================================================
 # 2. query_delay_ripple() - Query the impact range of a delay
@@ -286,7 +263,8 @@ def query_alternative_routes(
             records = list(result)
 
             if not records:
-                return [{"error": f"No alternative route found avoiding {avoid_station_id}"}]
+                return []
+            
 
             alternatives = []
 
@@ -309,14 +287,7 @@ def query_alternative_routes(
                     if rel.get("line"):
                         lines_used.add(rel.get("line"))
 
-                alternatives.append({
-                    "rank": rank,
-                    "route": route,
-                    "total_time_min": int(total_time) if total_time else 0,
-                    "num_stops": len(nodes),
-                    "lines_used": list(lines_used),
-                    "avoided_station": avoid_station_id
-                })
+                alternatives.append(route)
 
             return alternatives
 

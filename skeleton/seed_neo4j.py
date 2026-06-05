@@ -60,7 +60,6 @@ class StationData:
     name: str
     lines: List[str]
 
-
 @dataclass
 class ConnectionData:
     """
@@ -76,7 +75,6 @@ class ConnectionData:
     connection_type: str
     service_type: str = "normal"
     per_stop_rate_usd: float = 1.50
-
 
 # ============================================================================
 # Data Loader
@@ -180,9 +178,13 @@ class DataLoader:
             for schedule in schedules_data:
                 service_type = schedule.get('service_type', 'normal')
                 stops = schedule.get('stops_in_order', [])
-                per_stop_rate = schedule.get('fare_classes', {}).get(
+                per_stop_rate_standard = schedule.get('fare_classes', {}).get(
                     'standard', {}
                 ).get('per_stop_rate_usd', 1.50)
+                per_stop_rate_first = schedule.get('fare_classes', {}).get(
+                    'first', {}
+                ).get('per_stop_rate_usd', 2.50)
+
 
                 times = schedule.get('travel_time_from_origin_min', {})
                 for i in range(len(stops) - 1):
@@ -197,7 +199,7 @@ class DataLoader:
                         travel_time_min=max(time, 1),
                         connection_type='rail',
                         service_type=service_type,
-                        per_stop_rate_usd=per_stop_rate
+                        per_stop_rate_usd=per_stop_rate_standard
                     )
                     rail_connections.append(conn)
         except FileNotFoundError:
@@ -364,7 +366,8 @@ class Neo4jSeeder:
         MATCH (s1:MetroStation {station_id: $from_id}), 
             (s2:MetroStation {station_id: $to_id})
         MERGE (s1)-[r:METRO_LINK {line: $line}]->(s2)
-        SET r.travel_time_min = $travel_time_min
+        SET r.travel_time_min = $travel_time_min,
+            r.per_stop_rate_usd = 0.0
         """
 
         count = 0
@@ -430,19 +433,17 @@ class Neo4jSeeder:
         # Metro -> National Rail
         query1 = """
         MATCH (ms:MetroStation {station_id: $from_id}), 
-              (nr:NationalRailStation {station_id: $to_id})
-        CREATE (ms)-[r:INTERCHANGE_TO {
-            travel_time_min: $travel_time_min
-        }]->(nr)
+            (nr:NationalRailStation {station_id: $to_id})
+        MERGE (ms)-[r:INTERCHANGE_TO {travel_time_min: $travel_time_min}]->(nr)
+        SET r.per_stop_rate_usd = 0.0
         """
 
         # National Rail -> Metro (reverse direction)
         query2 = """
         MATCH (nr:NationalRailStation {station_id: $from_id}), 
-              (ms:MetroStation {station_id: $to_id})
-        CREATE (nr)-[r:INTERCHANGE_TO {
-            travel_time_min: $travel_time_min
-        }]->(ms)
+            (ms:MetroStation {station_id: $to_id})
+        MERGE (nr)-[r:INTERCHANGE_TO {travel_time_min: $travel_time_min}]->(ms)
+        SET r.per_stop_rate_usd = 0.0
         """
 
         count = 0
