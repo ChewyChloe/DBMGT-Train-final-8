@@ -400,7 +400,8 @@ class Neo4jSeeder:
             (s2:NationalRailStation {station_id: $to_id})
         MERGE (s1)-[r:RAIL_LINK {line: $line, service_type: $service_type}]->(s2)
         SET r.travel_time_min = $travel_time_min,
-            r.per_stop_rate_usd = $per_stop_rate_usd
+            r.per_stop_rate_usd = $per_stop_rate_usd,
+            r.per_stop_rate_usd_first = $per_stop_rate_usd_first
         """
 
         count = 0
@@ -414,7 +415,8 @@ class Neo4jSeeder:
                         travel_time_min=conn.travel_time_min,
                         line=conn.line,
                         service_type=conn.service_type,
-                        per_stop_rate_usd=conn.per_stop_rate_usd
+                        per_stop_rate_usd=conn.per_stop_rate_usd,
+                        per_stop_rate_usd_first=round(conn.per_stop_rate_usd * 5 / 3, 2)
                     )
                     count += 1
                 except Exception as e:

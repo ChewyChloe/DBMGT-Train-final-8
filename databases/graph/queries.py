@@ -417,12 +417,15 @@ def query_cheapest_route(
     """
     try:
         with driver.session() as session:
-            result = session.run("""
-                MATCH (origin {station_id: $origin_id})
-                MATCH (destination {station_id: $destination_id})
+
+            weight = 'per_stop_rate_usd' if fare_class == 'standard' else 'per_stop_rate_usd_first'
+
+            result = session.run(f"""
+                MATCH (origin {{station_id: $origin_id}})
+                MATCH (destination {{station_id: $destination_id}})
                 CALL apoc.algo.dijkstra(origin, destination,
                     'METRO_LINK|RAIL_LINK|INTERCHANGE_TO',
-                    'per_stop_rate_usd')
+                    '{weight}')
                 YIELD path, weight
                 RETURN path, weight
             """, origin_id=origin_id, destination_id=destination_id)
