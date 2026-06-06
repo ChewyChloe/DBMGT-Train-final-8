@@ -12,7 +12,7 @@ import time
 sys.path.insert(0, ".")
 
 from skeleton.llm_provider import llm
-from databases.relational.queries import store_policy_document, _connect  # 👈 引入連線 helper 用來清空資料
+from databases.relational.queries import store_policy_document, _connect 
 
 _DATA_DIR = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "train-mock-data")
