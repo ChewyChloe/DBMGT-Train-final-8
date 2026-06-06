@@ -358,7 +358,8 @@ def query_interchange_path(origin_id: str, destination_id: str) -> Dict:
                 }
 
                 if i > 0 and relationships[i - 1].type == "INTERCHANGE_TO":
-                    current_part = "rail"
+                    # After interchange, switch to the other system
+                    current_part = "metro" if current_part == "rail" else "rail"
                     interchange_info = {
                         "from_station_id": nodes[i - 1].get("station_id"),
                         "from_station_name": nodes[i - 1].get("name"),
@@ -497,7 +498,7 @@ def test_queries():
 
     print("\n1. Testing query_station_connections()...")
     result = query_station_connections("MS01")
-    print(f"   Connections: {result.get('total_connections')}")
+    print(f"   Connections: {len(result)}")
 
     print("\n2. Testing query_delay_ripple()...")
     result = query_delay_ripple("MS05", hops=2)
