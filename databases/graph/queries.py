@@ -3,17 +3,15 @@ Neo4j Graph Database Query Functions
 =====================================
 Module: databases/graph/queries.py
 
-Purpose: Implement 6 query functions to query graph data in Neo4j
+Purpose: Implement 6 query functions for querying Neo4j graph data
 
 Functions:
-  1. query_station_connections() - Query all connections of a specific station
-  2. query_delay_ripple() - Query the ripple effect of a delay
-  3. query_shortest_route() - Query the shortest route (core feature)
+  1. query_station_connections() - Query all connections of a station
+  2. query_delay_ripple() - Query the impact range of a delay
+  3. query_shortest_route() - Query shortest path (core feature)
   4. query_alternative_routes() - Query alternative routes
   5. query_interchange_path() - Query cross-system interchange routes
-  6. query_cheapest_route() - Query the cheapest route
-
-Note: This is the first version, runnable, can be improved later as needed
+  6. query_cheapest_route() - Query cheapest route
 """
 
 from neo4j import GraphDatabase
@@ -21,78 +19,58 @@ from typing import Dict, List, Optional
 import os
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
-# Read configuration
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:8001")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "transitflow")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "transitflow2026")
 
-# Create driver
 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
 
 
 # ============================================================================
-# 1️⃣ query_station_connections() - Query all connections of a specific station
+# 1. query_station_connections() - Query all connections of a station
 # ============================================================================
 
-def query_station_connections(station_id: str) -> Dict:
+def query_station_connections(station_id: str) -> List[Dict]:
     """
-    Query all connections of a given station
-    
+    Query all connections of a given station.
+
     Args:
         station_id: Station ID (e.g. "MS01")
-    
+
     Returns:
-        {
-            "station_id": "MS01",
-            "station_name": "Central Square",
-            "connections": [
-                {
-                    "to_station_id": "MS02",
-                    "to_station_name": "Station 2",
-                    "line": "M1",
-                    "travel_time_min": 3,
-                    "type": "metro"
-                }
-            ],
-            "total_connections": 1
-        }
+        [
+            {
+                "to_station_id": "MS02",
+                "to_station_name": "Station 2",
+                "line": "M1",
+                "travel_time_min": 3,
+                "type": "metro"
+            }
+        ]
     """
     try:
         with driver.session() as session:
-            # Query all connections for this station
             result = session.run("""
                 MATCH (s)-[r]->(connected)
                 WHERE s.station_id = $station_id
                 RETURN 
-                    s.station_id as station_id,
-                    s.name as station_name,
                     connected.station_id as to_station_id,
                     connected.name as to_station_name,
                     r.line as line,
                     r.travel_time_min as travel_time_min,
                     type(r) as relationship_type
             """, station_id=station_id)
-            
+
             records = list(result)
-            
+
             if not records:
-                return {
-                    "station_id": station_id,
-                    "station_name": "Unknown",
-                    "connections": [],
-                    "total_connections": 0,
-                    "error": "Station not found"
-                }
-            
-            # Parse results
-            station_data = records[0]
+                return []
+
             connections = []
-            
+
             for record in records:
-                # Determine connection type
                 relationship_type = record.get("relationship_type")
                 if relationship_type == "METRO_LINK":
                     conn_type = "metro"
@@ -102,7 +80,7 @@ def query_station_connections(station_id: str) -> Dict:
                     conn_type = "interchange"
                 else:
                     conn_type = "unknown"
-                
+
                 connections.append({
                     "to_station_id": record.get("to_station_id"),
                     "to_station_name": record.get("to_station_name"),
@@ -110,33 +88,25 @@ def query_station_connections(station_id: str) -> Dict:
                     "travel_time_min": record.get("travel_time_min", 0),
                     "type": conn_type
                 })
-            
-            return {
-                "station_id": station_data.get("station_id"),
-                "station_name": station_data.get("station_name"),
-                "connections": connections,
-                "total_connections": len(connections)
-            }
-    
-    except Exception as e:
-        return {
-            "station_id": station_id,
-            "error": f"Query failed: {str(e)}"
-        }
 
+            return connections
+
+    except Exception as e:
+        return [{"error": f"Query failed: {str(e)}"}]
 
 # ============================================================================
-# 2️⃣ query_delay_ripple() - Query delay impact area
+# 2. query_delay_ripple() - Query the impact range of a delay
 # ============================================================================
 
 def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> List[Dict]:
     """
-    Query how many surrounding stations are affected when a station is delayed
-    Use APOC subgraphNodes to expand outward from the delayed station
-    
+    Query which stations are affected when a given station is delayed.
+    Uses APOC subgraphNodes to expand outward from the delayed station.
+    Includes the delayed station itself and hops_away for each affected station.
+
     Args:
-        delayed_station_id: Delayed station ID (e.g. "MS05")
-        hops: Number of hops the delay propagates (default 2)
+        delayed_station_id: ID of the delayed station (e.g. "MS05")
+        hops: Number of hops to propagate the delay (default 2)
     """
     try:
         with driver.session() as session:
@@ -147,13 +117,19 @@ def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> List[Dict]:
                     relationshipFilter: 'METRO_LINK|RAIL_LINK'
                 })
                 YIELD node
-                WITH node                 
-                WHERE node.station_id <> $delayed_station
+                WITH center, node
+                OPTIONAL MATCH path = shortestPath((center)-[:METRO_LINK|RAIL_LINK*]-(node))
+                WHERE center.station_id <> node.station_id
+                WITH node,
+                    CASE WHEN center.station_id = node.station_id THEN 0
+                        ELSE length(path)
+                    END as hops_away
                 RETURN
                     node.station_id as station_id,
                     node.name as station_name,
-                    node.lines as lines
-                ORDER BY station_id
+                    node.lines as lines,
+                    hops_away
+                ORDER BY hops_away, station_id
             """, delayed_station=delayed_station_id, hops=hops)
 
             records = list(result)
@@ -163,7 +139,8 @@ def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> List[Dict]:
                 affected_stations.append({
                     "station_id": record.get("station_id"),
                     "station_name": record.get("station_name"),
-                    "affected_lines": record.get("lines", [])
+                    "affected_lines": record.get("lines", []),
+                    "hops_away": record.get("hops_away", 0)
                 })
 
             return affected_stations
@@ -171,14 +148,15 @@ def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> List[Dict]:
     except Exception as e:
         return [{"error": f"Query failed: {str(e)}"}]
 
+
 # ============================================================================
-# 3️⃣ query_shortest_route() - Query shortest route (most important)
+# 3. query_shortest_route() - Query shortest path by travel time
 # ============================================================================
 
 def query_shortest_route(origin_id: str, destination_id: str, network: str = "auto") -> Dict:
     """
-    Query the shortest time path between two stations (using Dijkstra's algorithm)
-    
+    Query the time-shortest path between two stations using Dijkstra algorithm.
+
     Args:
         origin_id: Origin station ID (e.g. "MS01")
         destination_id: Destination station ID (e.g. "MS10")
@@ -195,9 +173,9 @@ def query_shortest_route(origin_id: str, destination_id: str, network: str = "au
                 YIELD path, weight
                 RETURN path, weight
             """, origin_id=origin_id, destination_id=destination_id)
-            
+
             record = next(result, None)
-            
+
             if not record:
                 return {
                     "origin": {"station_id": origin_id},
@@ -205,26 +183,26 @@ def query_shortest_route(origin_id: str, destination_id: str, network: str = "au
                     "route": [],
                     "error": "No path found"
                 }
-            
+
             path = record.get("path")
             total_time = record.get("weight", 0)
             nodes = list(path.nodes)
             relationships = list(path.relationships)
-            
+
             route = []
             lines_used = set()
-            
+
             for node in nodes:
                 route.append({
                     "station_id": node.get("station_id"),
                     "station_name": node.get("name"),
                     "lines": node.get("lines", [])
                 })
-            
+
             for rel in relationships:
                 if rel.get("line"):
                     lines_used.add(rel.get("line"))
-            
+
             return {
                 "origin": {
                     "station_id": nodes[0].get("station_id"),
@@ -240,7 +218,7 @@ def query_shortest_route(origin_id: str, destination_id: str, network: str = "au
                 "transfers": sum(1 for r in relationships if r.type == "INTERCHANGE_TO"),
                 "lines_used": list(lines_used)
             }
-    
+
     except Exception as e:
         return {
             "origin": {"station_id": origin_id},
@@ -248,8 +226,9 @@ def query_shortest_route(origin_id: str, destination_id: str, network: str = "au
             "error": f"Query failed: {str(e)}"
         }
 
+
 # ============================================================================
-# 4️⃣ query_alternative_routes() - Query alternative routes
+# 4. query_alternative_routes() - Query alternative routes avoiding a station
 # ============================================================================
 
 def query_alternative_routes(
@@ -260,29 +239,33 @@ def query_alternative_routes(
     max_routes: int = 3
 ) -> List[Dict]:
     """
-    Query alternative routes (when a station is closed)
-    Use Dijkstra's algorithm, find shortest time route excluding specified station
-    
+    Query alternative routes when a station is closed.
+    Finds all paths avoiding the specified station,
+    ordered by total travel time.
+
     Args:
-        origin_id: Origin station
-        destination_id: Destination station
-        avoid_station_id: Station to avoid
+        origin_id: Origin station ID
+        destination_id: Destination station ID
+        avoid_station_id: Station ID to avoid
         max_routes: Maximum number of routes to return
     """
     try:
         with driver.session() as session:
             result = session.run("""
-                MATCH (origin {station_id: $origin_id})
-                MATCH (destination {station_id: $destination_id})
-                MATCH (avoid {station_id: $avoid_station_id})
-                CALL apoc.algo.dijkstra(origin, destination,
-                    'METRO_LINK|RAIL_LINK|INTERCHANGE_TO',
-                    'travel_time_min')
-                YIELD path, weight
-                WHERE none(n IN nodes(path) WHERE n.station_id = $avoid_station_id)
-                RETURN path, weight
+                MATCH path = (origin)-[*1..8]->(destination)
+                WHERE origin.station_id = $origin_id
+                AND destination.station_id = $destination_id
+                AND none(n IN nodes(path) WHERE n.station_id = $avoid_station_id)
+                WITH path,
+                    reduce(t=0, r IN relationships(path) | t + r.travel_time_min) AS total_time,
+                    [n IN nodes(path) | n.station_id] AS station_ids
+                WITH path, total_time, station_ids
+                WHERE size(apoc.coll.toSet(station_ids)) = size(station_ids)
+                WITH DISTINCT station_ids, total_time, path
+                ORDER BY total_time
                 LIMIT $max_routes
-            """, 
+                RETURN path, total_time
+            """,
             origin_id=origin_id,
             destination_id=destination_id,
             avoid_station_id=avoid_station_id,
@@ -291,13 +274,14 @@ def query_alternative_routes(
             records = list(result)
 
             if not records:
-                return [{"error": f"No alternative route found avoiding {avoid_station_id}"}]
+                return []
+            
 
             alternatives = []
 
             for rank, record in enumerate(records, 1):
                 path = record.get("path")
-                total_time = record.get("weight", 0)
+                total_time = record.get("total_time", 0)
                 nodes = list(path.nodes)
                 relationships = list(path.relationships)
 
@@ -314,32 +298,26 @@ def query_alternative_routes(
                     if rel.get("line"):
                         lines_used.add(rel.get("line"))
 
-                alternatives.append({
-                    "rank": rank,
-                    "route": route,
-                    "total_time_min": int(total_time),
-                    "num_stops": len(nodes),
-                    "lines_used": list(lines_used),
-                    "avoided_station": avoid_station_id
-                })
+                alternatives.append(route)
 
             return alternatives
 
     except Exception as e:
         return [{"error": f"Query failed: {str(e)}"}]
+        
 
 # ============================================================================
-# 5️⃣ query_interchange_path() - Query cross-system interchange route (most complex)
+# 5. query_interchange_path() - Query cross-system interchange route
 # ============================================================================
 
 def query_interchange_path(origin_id: str, destination_id: str) -> Dict:
     """
-    Query cross-system interchange route (Metro ↔ National Rail)
-    Use Dijkstra's algorithm, weighting by travel_time_min
-    
+    Query cross-system interchange route (Metro <-> National Rail).
+    Uses Dijkstra algorithm weighted by travel_time_min.
+
     Args:
-        origin_id: Origin station (can be any type)
-        destination_id: Destination station (can be any type)
+        origin_id: Origin station ID (any type)
+        destination_id: Destination station ID (any type)
     """
     try:
         with driver.session() as session:
@@ -367,11 +345,10 @@ def query_interchange_path(origin_id: str, destination_id: str) -> Dict:
             nodes = list(path.nodes)
             relationships = list(path.relationships)
 
-            # Find the interchange point, split into metro and rail segments
             metro_part = []
             rail_part = []
             interchange_info = None
-            current_part = "metro"
+            current_part = "rail" if origin_id.startswith("NR") else "metro"
 
             for i, node in enumerate(nodes):
                 station = {
@@ -380,9 +357,9 @@ def query_interchange_path(origin_id: str, destination_id: str) -> Dict:
                     "lines": node.get("lines", [])
                 }
 
-                # Check if the previous relationship is INTERCHANGE_TO
                 if i > 0 and relationships[i - 1].type == "INTERCHANGE_TO":
-                    current_part = "rail"
+                    # After interchange, switch to the other system
+                    current_part = "metro" if current_part == "rail" else "rail"
                     interchange_info = {
                         "from_station_id": nodes[i - 1].get("station_id"),
                         "from_station_name": nodes[i - 1].get("name"),
@@ -420,8 +397,9 @@ def query_interchange_path(origin_id: str, destination_id: str) -> Dict:
             "error": f"Query failed: {str(e)}"
         }
 
+
 # ============================================================================
-# 6️⃣ query_cheapest_route() - Query cheapest route
+# 6. query_cheapest_route() - Query cheapest route by fare
 # ============================================================================
 
 def query_cheapest_route(
@@ -431,22 +409,24 @@ def query_cheapest_route(
     fare_class: str = "standard"
 ) -> Dict:
     """
-    Query the cheapest route
-    Use Dijkstra's algorithm, finding lowest cost route weighted by per_stop_rate_usd
-    
+    Query the cheapest route using Dijkstra algorithm weighted by per_stop_rate_usd.
+
     Args:
-        origin_id: Origin station
-        destination_id: Destination station
+        origin_id: Origin station ID
+        destination_id: Destination station ID
         fare_class: "standard" / "first"
     """
     try:
         with driver.session() as session:
-            result = session.run("""
-                MATCH (origin {station_id: $origin_id})
-                MATCH (destination {station_id: $destination_id})
+
+            weight = 'per_stop_rate_usd' if fare_class == 'standard' else 'per_stop_rate_usd_first'
+
+            result = session.run(f"""
+                MATCH (origin {{station_id: $origin_id}})
+                MATCH (destination {{station_id: $destination_id}})
                 CALL apoc.algo.dijkstra(origin, destination,
                     'METRO_LINK|RAIL_LINK|INTERCHANGE_TO',
-                    'per_stop_rate_usd')
+                    '{weight}')
                 YIELD path, weight
                 RETURN path, weight
             """, origin_id=origin_id, destination_id=destination_id)
@@ -502,54 +482,48 @@ def query_cheapest_route(
             "error": f"Query failed: {str(e)}"
         }
 
+
 # ============================================================================
-# Test functions (Optional)
+# Test function (optional)
 # ============================================================================
 
 def test_queries():
     """
-    Test all query functions
-    Run this function to verify queries work correctly
+    Test all query functions.
+    Run this function to verify queries are working correctly.
     """
     print("=" * 60)
     print("Testing Neo4j Query Functions")
     print("=" * 60)
-    
-    # Test 1: Query connections
+
     print("\n1. Testing query_station_connections()...")
     result = query_station_connections("MS01")
-    print(f"   Connections: {result.get('total_connections')}")
-    
-    # Test 2: Delay ripple
+    print(f"   Connections: {len(result)}")
+
     print("\n2. Testing query_delay_ripple()...")
     result = query_delay_ripple("MS05", hops=2)
     print(f"   Affected stations: {len(result)}")
-    
-    # Test 3: Shortest route
+
     print("\n3. Testing query_shortest_route()...")
     result = query_shortest_route("MS01", "MS10")
     print(f"   Route found: {result.get('num_stops')} stops, {result.get('total_time_min')} min")
-    
-    # Test 4: Alternative routes
+
     print("\n4. Testing query_alternative_routes()...")
     result = query_alternative_routes("MS01", "MS10", "MS05")
     print(f"   Alternative routes found: {len(result)}")
-    
-    # Test 5: Interchange path
+
     print("\n5. Testing query_interchange_path()...")
     result = query_interchange_path("MS01", "NR05")
     print(f"   Interchange path: {result.get('total_stops')} stops")
-    
-    # Test 6: Cheapest route
+
     print("\n6. Testing query_cheapest_route()...")
     result = query_cheapest_route("MS01", "MS10")
     print(f"   Cheapest route: ${result.get('total_cost_usd')}")
-    
+
     print("\n" + "=" * 60)
     print("All tests completed!")
     print("=" * 60)
 
 
 if __name__ == "__main__":
-    # Execute tests if this script is run directly
     test_queries()
