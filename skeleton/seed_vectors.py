@@ -12,7 +12,7 @@ import time
 sys.path.insert(0, ".")
 
 from skeleton.llm_provider import llm
-from databases.relational.queries import store_policy_document
+from databases.relational.queries import store_policy_document, _connect  # 👈 引入連線 helper 用來清空資料
 
 _DATA_DIR = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "train-mock-data")
@@ -175,7 +175,8 @@ def build_documents():
     tp = _load("travel_policies.json")
     for network in ["metro", "national_rail"]:
         if network in tp:
-            network_label = "Metro Network" if network == "national_rail" else "Metro Network"
+            network_label = "National Rail Network" if network == "national_rail" else "Metro Network"
+            
             # Decouples the entire network block into modular sub-topics.
             # Prevents unrelated rules from polluting the vector space and increases retrieval recall.
             for topic, details in tp[network].items():
@@ -199,7 +200,27 @@ def build_documents():
     return docs
 
 
+def clear_policy_documents():
+    """
+    Cleaning up old policy documents to ensure idempotency.
+    """
+    print("🧹 Cleaning up old policy documents!")
+    conn = _connect()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("TRUNCATE TABLE policy_documents RESTART IDENTITY CASCADE;")
+        conn.commit()
+        print("✓ Database cleaned successfully.")
+    except Exception as e:
+        conn.rollback()
+        print(f"⚠️ Could not truncate table (it might not exist yet): {e}")
+    finally:
+        conn.close()
+
+
 def seed():
+    clear_policy_documents()
+
     documents = build_documents()
     print(f"📄 Embedding {len(documents)} policy documents using {llm.chat_provider}...\n")
 
