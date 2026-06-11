@@ -28,18 +28,41 @@ TransitFlow 是一個結合三種資料庫技術與 LLM Agent 的智慧鐵路助
 | 陳宇緹 | 組員 | 圖形演算法引擎 | Neo4j 拓撲路網 + 路線搜尋演算法 |
 | 楊依純 | 組員 | 知識庫向量化 + 展示情境設計 | pgvector 政策 RAG + Demo QA 測試 |
 
-### 呂沛珍（組長）— 關聯式核心 + Agent 總整合
+### 呂沛珍（組長）— PostgreSQL Relational Core、Integration Lead、Agent Coordination
 
 **具體任務與實作內容：**
 
-1. 設計關聯式資料表（Stations、Schedules、Users、Bookings、Payments 等）
-2. 撰寫 `schema.sql` 與實作 `seed_postgres.py`
-3. 主導 LLM Agent 工具註冊（將 SQL 查詢包裝成 Agent 可調用的 Tools）與 UI 串接整合
+1. 設計 PostgreSQL 關聯式資料模型，包含 users、credentials、stations、lines、schedules、schedule stops、fare classes、seats、bookings、payments、feedback、policy_documents 等資料表。
+2. 撰寫並維護 `databases/relational/schema.sql`，設計 PK / FK / unique constraints / indexes，並確保資料符合 referential integrity。
+3. 實作與維護 `skeleton/seed_postgres.py`，支援 bulk seed，並使用 conflict handling 確保 seed script 可重複執行。
+4. 實作 PostgreSQL 查詢功能，例如：
+   - `login_user`
+   - `query_user_profile`
+   - `query_national_rail_availability`
+   - `query_national_rail_fare`
+   - `query_available_seats`
+   - `query_metro_schedules`
+   - `query_metro_fare`
+   - `query_payment_info`
+   - `query_user_bookings`
+   - `execute_booking`
+   - `execute_cancellation`
+5. 實作使用者認證相關邏輯，包含密碼雜湊、登入驗證、使用者狀態檢查等。
+6. 實作 National Rail booking transaction，確保 booking、seat assignment、payment creation 在同一個 database transaction 中完成。
+7. 實作 cancellation / refund 相關資料庫邏輯，確保訂票狀態與付款狀態可以一致更新。
+8. 協助 Agent tool integration，確認 PostgreSQL tools 可被 Agent 呼叫，並測試 payment、availability、booking 等 runtime cases。
+9. 負責 final backend integration testing，整合 PostgreSQL、Neo4j、RAG / Vector 三個 backend 模組。
+10. Review 組員 PR，包括 Neo4j graph PR 與 RAG seeder PR，協助測試 edge cases 並回報修正建議。
+11. 整理 final testing evidence、known issues、setup steps，協助文件與交付前檢查。
 
 **預期交付成果：**
 
-1. PostgreSQL 可成功 Bulk-seed 並確保資料完整性（PK / FK）
-2. 核心訂票、付款、查時刻表等後台邏輯與 AI 連動正常
+1. PostgreSQL schema 可成功建立，且資料表具有完整 PK / FK / constraints。
+2. `seed_postgres.py` 可成功 bulk seed 且可重複執行。
+3. PostgreSQL 查詢功能可支援登入、查班次、查票價、查座位、訂票、付款、取消訂票等核心流程。
+4. Booking / payment / cancellation 相關操作具備 transaction safety。
+5. PostgreSQL、Neo4j、RAG backend 可在最新 main branch 上共同運作並完成 integration test。
+6. Agent 可成功載入 PostgreSQL tools，並已完成部分 runtime 測試與 known issue 記錄。
 
 ### 陳宇緹 — 圖形演算法引擎
 
