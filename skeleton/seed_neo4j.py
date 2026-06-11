@@ -33,7 +33,7 @@ class Config:
 
     NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:8001")
     NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
-    NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "transitflow2026")
+    NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "transitflow")
 
     # Mock data paths
     DATA_DIR = Path(__file__).parent.parent / "train-mock-data"
