@@ -559,6 +559,26 @@ def seed_feedback(cur):
     print(f"  feedback: {n} rows inserted (of {len(rows)})")
 
 
+# TASK 6 EXTENSION: Seed initial membership loyalty points
+def seed_user_loyalty_points(cur):
+    """Seed user_loyalty_points with initial membership points.
+
+    Points are hard-coded for the five demo users so the feature is
+    immediately testable without external dependencies.
+    """
+    # TASK 6 EXTENSION
+    INITIAL_POINTS = [
+        ("RU01", 120),
+        ("RU02", 80),
+        ("RU03", 250),
+        ("RU04", 0),
+        ("RU05", 500),
+    ]
+    columns = ["user_id", "points_balance"]
+    n = insert_many(cur, "user_loyalty_points", columns, INITIAL_POINTS)
+    print(f"  user_loyalty_points: {n} rows inserted (of {len(INITIAL_POINTS)})")
+
+
 # ── main ─────────────────────────────────────────────────────────────────────
 
 def main():
@@ -598,6 +618,9 @@ def main():
         # 6. Payments & Feedback
         seed_payments(cur)
         seed_feedback(cur)
+
+        # TASK 6 EXTENSION: Loyalty points
+        seed_user_loyalty_points(cur)
 
         conn.commit()
         print("\nAll done. Database seeded successfully.")

@@ -432,37 +432,62 @@ class Neo4jSeeder:
         """
         print("\n🔄 Seeding interchange relationships...")
 
+        # TASK 6 EXTENSION: Central Station (MS01/NR01) is the busiest
+        # interchange — give it a higher crowd_penalty to model real-world
+        # congestion.  Other interchanges get a lower baseline penalty.
+        CROWDED_STATIONS = {"MS01", "NR01"}          # Central Station / Central Square
+        CROWD_PENALTY_HIGH = 1.5                     # busy hub
+        CROWD_PENALTY_LOW  = 0.5                     # smaller interchange
+        TRANSFER_WAIT_TIME_MIN = 4                   # fixed walking + waiting buffer
+
         # Metro -> National Rail
+        # TASK 6 EXTENSION: added transfer_wait_time_min, crowd_penalty
         query1 = """
         MATCH (ms:MetroStation {station_id: $from_id}), 
             (nr:NationalRailStation {station_id: $to_id})
         MERGE (ms)-[r:INTERCHANGE_TO {travel_time_min: $travel_time_min}]->(nr)
-        SET r.per_stop_rate_usd = 0.0
+        SET r.per_stop_rate_usd = 0.0,
+            r.transfer_wait_time_min = $transfer_wait,
+            r.crowd_penalty = $crowd_penalty
         """
 
         # National Rail -> Metro (reverse direction)
+        # TASK 6 EXTENSION: added transfer_wait_time_min, crowd_penalty
         query2 = """
         MATCH (nr:NationalRailStation {station_id: $from_id}), 
             (ms:MetroStation {station_id: $to_id})
         MERGE (nr)-[r:INTERCHANGE_TO {travel_time_min: $travel_time_min}]->(ms)
-        SET r.per_stop_rate_usd = 0.5
+        SET r.per_stop_rate_usd = 0.5,
+            r.transfer_wait_time_min = $transfer_wait,
+            r.crowd_penalty = $crowd_penalty
         """
 
         count = 0
         with self.driver.session() as session:
             for conn in interchange_connections:
                 try:
+                    # TASK 6 EXTENSION: determine crowd penalty per station pair
+                    is_crowded = (
+                        conn.from_station in CROWDED_STATIONS
+                        or conn.to_station in CROWDED_STATIONS
+                    )
+                    cp = CROWD_PENALTY_HIGH if is_crowded else CROWD_PENALTY_LOW
+
                     session.run(
                         query1,
                         from_id=conn.from_station,
                         to_id=conn.to_station,
-                        travel_time_min=conn.travel_time_min
+                        travel_time_min=conn.travel_time_min,
+                        transfer_wait=TRANSFER_WAIT_TIME_MIN,
+                        crowd_penalty=cp,
                     )
                     session.run(
                         query2,
                         from_id=conn.to_station,
                         to_id=conn.from_station,
-                        travel_time_min=conn.travel_time_min
+                        travel_time_min=conn.travel_time_min,
+                        transfer_wait=TRANSFER_WAIT_TIME_MIN,
+                        crowd_penalty=cp,
                     )
                     count += 1
                 except Exception as e:

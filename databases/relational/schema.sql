@@ -285,6 +285,22 @@ CREATE TABLE feedback (
 
 
 -- ============================================================
+--  8. LOYALTY POINTS (TASK 6 EXTENSION)
+-- ============================================================
+
+-- TASK 6 EXTENSION: Membership loyalty points for fare discounts.
+-- Separate table (not a column on registered_users) to isolate the
+-- extension from the core user schema and preserve SRP.
+CREATE TABLE IF NOT EXISTS user_loyalty_points (
+    user_id        VARCHAR(20) PRIMARY KEY
+                   REFERENCES registered_users(user_id),
+    points_balance INTEGER NOT NULL DEFAULT 0
+                   CHECK (points_balance >= 0),
+    updated_at     TIMESTAMPTZ DEFAULT NOW()
+);
+
+
+-- ============================================================
 --  VECTOR SCHEMA  (RAG / Help Desk) — do not modify
 -- ============================================================
 

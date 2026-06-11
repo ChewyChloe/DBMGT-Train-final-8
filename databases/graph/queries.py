@@ -484,6 +484,124 @@ def query_cheapest_route(
 
 
 # ============================================================================
+# TASK 6 EXTENSION: Route with transfer waiting penalty
+# ============================================================================
+
+# TASK 6 EXTENSION
+def query_route_with_transfer_penalty(
+    origin_id: str,
+    destination_id: str,
+    avoid_crowded: bool = True,
+) -> Dict:
+    """Find a route and apply transfer waiting + crowd penalties.
+
+    Uses the same Dijkstra shortest-path as query_shortest_route,
+    then adds penalties from INTERCHANGE_TO relationship properties
+    (transfer_wait_time_min, crowd_penalty) on the Python side.
+    This avoids modifying the core routing queries.
+
+    Args:
+        origin_id:      Origin station ID (e.g. "MS01")
+        destination_id: Destination station ID (e.g. "NR05")
+        avoid_crowded:  If True, include crowd_penalty in adjusted score
+
+    Returns:
+        Dict with route, base_time_min, transfer_wait_penalty_min,
+        crowd_penalty, adjusted_score, and explanation.
+    """
+    try:
+        with driver.session() as session:
+            result = session.run("""
+                MATCH (origin {station_id: $origin_id})
+                MATCH (destination {station_id: $destination_id})
+                CALL apoc.algo.dijkstra(origin, destination,
+                    'METRO_LINK|RAIL_LINK|INTERCHANGE_TO',
+                    'travel_time_min')
+                YIELD path, weight
+                RETURN path, weight
+            """, origin_id=origin_id, destination_id=destination_id)
+
+            record = next(result, None)
+
+            if not record:
+                return {
+                    "origin": {"station_id": origin_id},
+                    "destination": {"station_id": destination_id},
+                    "route": [],
+                    "error": "No path found",
+                }
+
+            path = record.get("path")
+            base_time = record.get("weight", 0)
+            nodes = list(path.nodes)
+            relationships = list(path.relationships)
+
+            # Build route list
+            route = []
+            for node in nodes:
+                route.append({
+                    "station_id": node.get("station_id"),
+                    "station_name": node.get("name"),
+                })
+
+            # TASK 6 EXTENSION: accumulate transfer penalties from
+            # INTERCHANGE_TO relationship properties set during seeding
+            total_transfer_wait = 0.0
+            total_crowd_penalty = 0.0
+            interchange_count = 0
+
+            for rel in relationships:
+                if rel.type == "INTERCHANGE_TO":
+                    interchange_count += 1
+                    wait = rel.get("transfer_wait_time_min", 0)
+                    crowd = rel.get("crowd_penalty", 0)
+                    total_transfer_wait += float(wait) if wait else 0.0
+                    if avoid_crowded:
+                        total_crowd_penalty += float(crowd) if crowd else 0.0
+
+            adjusted_score = round(
+                float(base_time) + total_transfer_wait + total_crowd_penalty, 2
+            )
+
+            # Build explanation
+            if interchange_count > 0:
+                explanation = (
+                    f"This route includes {interchange_count} interchange(s) "
+                    f"with a total transfer waiting penalty of "
+                    f"{total_transfer_wait} min"
+                )
+                if avoid_crowded and total_crowd_penalty > 0:
+                    explanation += (
+                        f" and a crowding penalty of {total_crowd_penalty} "
+                        f"for busy interchange stations"
+                    )
+                explanation += "."
+            else:
+                explanation = (
+                    "This route has no interchanges. "
+                    "No transfer penalty was applied."
+                )
+
+            return {
+                "origin": {"station_id": origin_id},
+                "destination": {"station_id": destination_id},
+                "route": route,
+                "base_time_min": int(base_time),
+                "transfer_wait_penalty_min": total_transfer_wait,
+                "crowd_penalty": total_crowd_penalty,
+                "adjusted_score": adjusted_score,
+                "explanation": explanation,
+            }
+
+    except Exception as e:
+        return {
+            "origin": {"station_id": origin_id},
+            "destination": {"station_id": destination_id},
+            "error": f"Query failed: {str(e)}",
+        }
+
+
+# ============================================================================
 # Test function (optional)
 # ============================================================================
 
@@ -519,6 +637,13 @@ def test_queries():
     print("\n6. Testing query_cheapest_route()...")
     result = query_cheapest_route("MS01", "MS10")
     print(f"   Cheapest route: ${result.get('total_cost_usd')}")
+
+    # TASK 6 EXTENSION
+    print("\n7. Testing query_route_with_transfer_penalty() (Task 6)...")
+    result = query_route_with_transfer_penalty("MS01", "NR05")
+    print(f"   Adjusted score: {result.get('adjusted_score')}, "
+          f"transfer wait: {result.get('transfer_wait_penalty_min')}, "
+          f"crowd penalty: {result.get('crowd_penalty')}")
 
     print("\n" + "=" * 60)
     print("All tests completed!")

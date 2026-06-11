@@ -197,6 +197,27 @@ def build_documents():
                     "content": content,
                 })
 
+    # 5. TASK 6 EXTENSION: Processing membership_policy.json
+    membership_file = os.path.join(_DATA_DIR, "membership_policy.json")
+    if os.path.exists(membership_file):
+        mp = _load("membership_policy.json")
+        for section_key, section_data in mp.items():
+            for topic, details in section_data.items():
+                title = f"Membership Policy — {section_key.replace('_', ' ').title()} - {topic.replace('_', ' ').title()}"
+
+                if isinstance(details, dict):
+                    details_str = _flatten_dict(details)
+                    content = f"TransitFlow membership policy regarding {topic.replace('_', ' ')}: {details_str}"
+                else:
+                    content = f"TransitFlow membership policy regarding {topic.replace('_', ' ')}: {details}"
+
+                docs.append({
+                    "title": title,
+                    "category": "membership",
+                    "source_file": "membership_policy.json",
+                    "content": content,
+                })
+
     return docs
 
 
