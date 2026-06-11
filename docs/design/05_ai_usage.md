@@ -17,7 +17,7 @@ We asked the AI to inspect `schema.sql`, `seed_postgres.py`, and `queries.py`, t
 The AI produced a detailed first draft with a Mermaid ER diagram, entity group descriptions, and normalisation examples using `nr_schedule_stops` (2NF, composite key partial dependency) and `payments` separation as part of the 3NF discussion. We manually reviewed the output against `schema.sql` and found two issues that needed correction:
 
 1. The initial draft described `REGISTERED_USERS` to `USER_LOYALTY_POINTS` as a mandatory 1:1 relationship. We corrected this to zero-or-one (1:0..1) because not every user is required to have a loyalty points row.
-2. The draft described `NR_BOOKINGS` to `PAYMENTS` and `FEEDBACK` as at-most-one relationships (1:0..1). We checked `schema.sql` and confirmed there are no UNIQUE constraints on `payments.nr_booking_id` or `feedback.nr_booking_id`, so these are actually one-to-many (1:N) relationships. We corrected the ER diagram and cardinality summary accordingly.
+2. The draft described `NR_BOOKINGS` to `PAYMENTS` and `FEEDBACK` as at-most-one relationships (1:0..1). We checked `schema.sql` and found that the XOR constraints control which booking type each payment or feedback row can reference, but there are no UNIQUE constraints on `payments.nr_booking_id`, `payments.metro_trip_id`, `feedback.nr_booking_id`, or `feedback.metro_trip_id`. We therefore revised the ERD wording to show that the database schema permits one-to-many relationships, even though the current application flow normally creates one payment per booking
 
 We also verified that the password hashing section correctly described PBKDF2-HMAC-SHA256 with per-user salt and 100,000 iterations, matching the `_hash_password` function in `queries.py`.
 
@@ -93,7 +93,7 @@ We tested semantic search and confirmed that relevant documents were retrieved:
 - Query "transfer waiting penalty" retrieved: Membership Policy, Transfer Policy, Transfer Waiting Penalty
 - Query "crowded station penalty" retrieved: Membership Policy, Transfer Policy, Crowded Station Penalty
 
-We also re-tested existing RAG queries (such as "lost and found" and "maintenance disruption refund") to confirm they still returned the correct policy documents. The representative existing RAG tests we reran still returned the expected documents.
+We also re-tested representative existing RAG queries, such as "lost and found" and "maintenance disruption refund", and they still returned the expected policy documents.
 
 ## 5.5 Example 5: Incorrect AI Output and Human Correction
 
