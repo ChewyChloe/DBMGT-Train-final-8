@@ -48,6 +48,9 @@ from databases.relational.queries import (
     execute_cancellation,
     query_payment_info,
     query_policy_vector_search,
+    # TASK 6 EXTENSION
+    query_user_loyalty_points,
+    execute_booking_with_loyalty_discount,
 )
 from databases.graph.queries import (
     query_shortest_route,
@@ -55,6 +58,8 @@ from databases.graph.queries import (
     query_alternative_routes,
     query_interchange_path,
     query_delay_ripple,
+    # TASK 6 EXTENSION
+    query_route_with_transfer_penalty,
 )
 
 
@@ -289,6 +294,48 @@ TOOLS = [
         },
         "required": ["station_id"],
     },
+    # TASK 6 EXTENSION: Loyalty points, discounted booking, transfer penalty
+    {
+        "name": "check_loyalty_points",
+        "description": (
+            "Check the logged-in user's membership loyalty points balance. "
+            "Use when the user asks about their loyalty points, reward points, "
+            "membership points, or discount eligibility."
+        ),
+        "parameters": {},
+        "required": [],
+    },
+    {
+        "name": "book_with_loyalty_discount",
+        "description": (
+            "Create a national rail booking with automatic loyalty point discount. "
+            "REQUIRES LOGIN. Use when the user wants to book and mentions loyalty points, "
+            "discount, or rewards. 100 points = 1.00 USD discount (max 1.00 per booking)."
+        ),
+        "parameters": {
+            "schedule_id":            {"type": "string", "description": "e.g. NR_SCH01"},
+            "origin_station_id":      {"type": "string", "description": "e.g. NR01"},
+            "destination_station_id": {"type": "string", "description": "e.g. NR05"},
+            "travel_date":            {"type": "string", "description": "YYYY-MM-DD"},
+            "fare_class":             {"type": "string", "description": "standard or first"},
+            "seat_id":                {"type": "string", "description": "Specific seat ID or 'any'"},
+        },
+        "required": ["schedule_id", "origin_station_id", "destination_station_id", "travel_date", "fare_class", "seat_id"],
+    },
+    {
+        "name": "route_with_transfer_penalty",
+        "description": (
+            "Find a route and show the adjusted travel time including transfer waiting "
+            "penalties and crowded station penalties. Use when the user asks about "
+            "transfer penalties, avoiding crowded stations, or adjusted journey time."
+        ),
+        "parameters": {
+            "origin_id":      {"type": "string", "description": "Station ID e.g. MS01 or NR01"},
+            "destination_id": {"type": "string", "description": "Station ID e.g. NR05 or MS10"},
+            "avoid_crowded":  {"type": "boolean", "description": "If true, include crowd penalty (default true)"},
+        },
+        "required": ["origin_id", "destination_id"],
+    },
 ]
 
 TOOLS_SCHEMA = """\
@@ -304,7 +351,10 @@ get_user_bookings()
 check_payment_status(booking_id)
 search_policy(query)
 find_alternative_routes(origin_id, destination_id, avoid_station_id, network?)
-get_delay_ripple(station_id, hops?)"""
+get_delay_ripple(station_id, hops?)
+check_loyalty_points()
+book_with_loyalty_discount(schedule_id, origin_station_id, destination_station_id, travel_date, fare_class, seat_id)
+route_with_transfer_penalty(origin_id, destination_id, avoid_crowded?)"""
 
 
 # ── Agent logic ───────────────────────────────────────────────────────────────
@@ -457,6 +507,37 @@ def _execute_tool(
             result = query_delay_ripple(
                 delayed_station_id=params["station_id"],
                 hops=params.get("hops", 2),
+            )
+
+        # TASK 6 EXTENSION: loyalty points, discounted booking, transfer penalty
+        elif tool_name == "check_loyalty_points":
+            if not current_user_email:
+                return json.dumps({"error": "You must be logged in to check loyalty points."})
+            result = query_user_loyalty_points(current_user_email)
+
+        elif tool_name == "book_with_loyalty_discount":
+            if not current_user_email:
+                return json.dumps({"error": "You must be logged in to book with loyalty discount."})
+            ok, data = execute_booking_with_loyalty_discount(
+                email=current_user_email,
+                schedule_id=params["schedule_id"],
+                origin_station_id=params["origin_station_id"],
+                destination_station_id=params["destination_station_id"],
+                travel_date=params["travel_date"],
+                fare_class=params.get("fare_class", "standard"),
+                seat_id=params.get("seat_id", "any"),
+                ticket_type=params.get("ticket_type", "single"),
+            )
+            result = data if ok else {"error": data}
+
+        elif tool_name == "route_with_transfer_penalty":
+            avoid = params.get("avoid_crowded", True)
+            if isinstance(avoid, str):
+                avoid = avoid.lower() in ("true", "yes", "1")
+            result = query_route_with_transfer_penalty(
+                origin_id=params["origin_id"],
+                destination_id=params["destination_id"],
+                avoid_crowded=avoid,
             )
 
         else:
@@ -688,6 +769,18 @@ JSON:"""
         if debug:
             debug_info.append(f"**Fallback:** {reason} → {name}({params})")
 
+    # TASK 6 EXTENSION: transfer penalty fallback — MUST come before the
+    # generic route fallback so "avoid crowded" + "route" doesn't match
+    # find_route first.
+    _penalty_triggers = {"transfer penalty", "avoid crowd", "crowded transfer",
+                          "transfer wait", "adjusted time", "interchange penalty",
+                          "waiting penalty"}
+    _is_penalty_route = _two_stations and any(kw in _lower for kw in _penalty_triggers)
+    if _is_penalty_route:
+        _fallback("route_with_transfer_penalty",
+                  {"origin_id": _station_ids[0].upper(), "destination_id": _station_ids[1].upper()},
+                  "transfer penalty route query (Task 6)")
+
     # 1. Route / directions / path — also overrides wrong-tool selections
     _route_triggers = {"fastest route", "quickest route", "shortest route", "cheapest route",
                        "best route", "how to get", "directions from", "route from", "route to",
@@ -696,7 +789,7 @@ JSON:"""
         any(kw in _lower for kw in _route_triggers) or
         (_two_stations and "route" in _lower)
     )
-    if _is_route and _two_stations and not _tool_selected("find_route", "origin_id", "destination_id"):
+    if _is_route and _two_stations and not _is_penalty_route and not _tool_selected("find_route", "origin_id", "destination_id"):
         _opt = "cost" if any(kw in _lower for kw in ["cheap", "cheapest", "lowest cost"]) else "time"
         _fallback("find_route",
                   {"origin_id": _station_ids[0].upper(), "destination_id": _station_ids[1].upper(), "optimise_by": _opt},
@@ -724,6 +817,13 @@ JSON:"""
                                "list booking", "show my", "view my"}
         if any(kw in _lower for kw in _personal_triggers):
             _fallback("get_user_bookings", {}, "personal booking query")
+
+    # TASK 6 EXTENSION: loyalty points fallback
+    if current_user_email and not tool_calls:
+        _loyalty_triggers = {"loyalty point", "reward point", "membership point",
+                              "my point", "how many point"}
+        if any(kw in _lower for kw in _loyalty_triggers):
+            _fallback("check_loyalty_points", {}, "loyalty points query")
 
     # Step 2: Execute each tool call against the real databases
     tool_results = []

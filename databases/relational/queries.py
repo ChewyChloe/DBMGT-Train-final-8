@@ -1126,3 +1126,329 @@ def store_policy_document(
         with conn.cursor() as cur:
             cur.execute(sql, (title, category, content, vec_str, source_file))
             return cur.fetchone()[0]
+
+
+# ============================================================
+#  TASK 6 EXTENSION — Loyalty Points & Discounted Booking
+# ============================================================
+
+# TASK 6 EXTENSION
+LOYALTY_POINTS_PER_USD_DISCOUNT = 100   # 100 points = 1.00 USD
+LOYALTY_DISCOUNT_USD = 1.00             # max discount per booking
+LOYALTY_RULE_TEXT = "100 points = 1.00 USD discount"
+
+
+# TASK 6 EXTENSION
+def query_user_loyalty_points(email: str) -> dict:
+    """Look up a user's membership loyalty points by email.
+
+    Returns:
+        {
+            "user_id": "RU01",
+            "email": "alice.tan@email.com",
+            "points_balance": 120,
+            "redeem_rule": "100 points = 1.00 USD discount"
+        }
+        or {"error": "..."} if the user is not found.
+    """
+    sql = """
+        SELECT ru.user_id, ru.email, COALESCE(lp.points_balance, 0) AS points_balance
+        FROM registered_users ru
+        LEFT JOIN user_loyalty_points lp ON lp.user_id = ru.user_id
+        WHERE ru.email = %s
+    """
+    try:
+        with _connect() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(sql, (email,))
+                row = cur.fetchone()
+                if not row:
+                    return {"error": f"No user found with email: {email}"}
+                return {
+                    "user_id": row["user_id"],
+                    "email": row["email"],
+                    "points_balance": row["points_balance"],
+                    "redeem_rule": LOYALTY_RULE_TEXT,
+                }
+    except Exception as e:
+        return {"error": f"Loyalty points query failed: {e}"}
+
+
+# TASK 6 EXTENSION
+def execute_booking_with_loyalty_discount(
+    email: str,
+    schedule_id: str,
+    origin_station_id: str,
+    destination_station_id: str,
+    travel_date: str,
+    fare_class: str = "standard",
+    seat_id: str = "any",
+    ticket_type: str = "single",
+) -> tuple[bool, dict | str]:
+    """Create a national rail booking with automatic loyalty-point discount.
+
+    Wraps the full booking + payment + loyalty-point update in a **single
+    PostgreSQL transaction** so everything commits or rolls back together.
+
+    Discount rules (configurable via module constants):
+        * 100 points  →  1.00 USD discount
+        * Max 1.00 USD discount per booking
+        * Points < 100  →  no discount applied
+        * Discount never exceeds the original fare
+
+    Args:
+        email:                  Logged-in user's email
+        schedule_id:            e.g. "NR_SCH01"
+        origin_station_id:      e.g. "NR01"
+        destination_station_id: e.g. "NR05"
+        travel_date:            e.g. "2025-06-01"
+        fare_class:             "standard" or "first"
+        seat_id:                Specific seat or "any"
+        ticket_type:            "single" (default) or "return"
+
+    Returns:
+        (True, result_dict)   on success
+        (False, error_str)    on failure — the entire transaction is rolled back
+    """
+    conn = psycopg2.connect(PG_DSN)
+    conn.autocommit = False
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # ── 1. Resolve user_id from email ────────────────────────────
+            cur.execute(
+                "SELECT user_id FROM registered_users WHERE email = %s",
+                (email,),
+            )
+            user_row = cur.fetchone()
+            if not user_row:
+                conn.rollback()
+                return (False, f"User not found for email: {email}")
+            user_id = user_row["user_id"]
+
+            # ── 2. Fetch loyalty points (with row-level lock) ────────────
+            cur.execute(
+                "SELECT points_balance FROM user_loyalty_points "
+                "WHERE user_id = %s FOR UPDATE",
+                (user_id,),
+            )
+            lp_row = cur.fetchone()
+            points_before = lp_row["points_balance"] if lp_row else 0
+
+            # ── 3. Check schedule exists ─────────────────────────────────
+            cur.execute(
+                "SELECT schedule_id FROM nr_schedules WHERE schedule_id = %s",
+                (schedule_id,),
+            )
+            if not cur.fetchone():
+                conn.rollback()
+                return (False, f"Schedule {schedule_id} not found.")
+
+            # ── 4. Validate origin & destination stops ───────────────────
+            cur.execute(
+                "SELECT stop_order FROM nr_schedule_stops "
+                "WHERE schedule_id = %s AND station_id = %s AND is_stopping = TRUE",
+                (schedule_id, origin_station_id),
+            )
+            origin_row = cur.fetchone()
+            if not origin_row:
+                conn.rollback()
+                return (False, f"Origin {origin_station_id} not on schedule {schedule_id}.")
+
+            cur.execute(
+                "SELECT stop_order FROM nr_schedule_stops "
+                "WHERE schedule_id = %s AND station_id = %s AND is_stopping = TRUE",
+                (schedule_id, destination_station_id),
+            )
+            dest_row = cur.fetchone()
+            if not dest_row:
+                conn.rollback()
+                return (False, f"Destination {destination_station_id} not on schedule {schedule_id}.")
+
+            if origin_row["stop_order"] >= dest_row["stop_order"]:
+                conn.rollback()
+                return (False, "Origin must come before destination.")
+
+            stops_travelled = dest_row["stop_order"] - origin_row["stop_order"]
+
+            # ── 5. Calculate original fare ───────────────────────────────
+            cur.execute(
+                "SELECT base_fare_usd, per_stop_rate_usd "
+                "FROM nr_schedule_fare_classes "
+                "WHERE schedule_id = %s AND fare_class = %s",
+                (schedule_id, fare_class),
+            )
+            fare_row = cur.fetchone()
+            if not fare_row:
+                conn.rollback()
+                return (False, f"Fare class '{fare_class}' not available for {schedule_id}.")
+
+            original_fare = round(
+                float(fare_row["base_fare_usd"])
+                + float(fare_row["per_stop_rate_usd"]) * stops_travelled,
+                2,
+            )
+
+            # ── 6. Apply loyalty discount ────────────────────────────────
+            if points_before >= LOYALTY_POINTS_PER_USD_DISCOUNT:
+                discount_usd = min(LOYALTY_DISCOUNT_USD, original_fare)
+                points_used = LOYALTY_POINTS_PER_USD_DISCOUNT
+            else:
+                discount_usd = 0.0
+                points_used = 0
+
+            final_amount = round(original_fare - discount_usd, 2)
+            points_after = points_before - points_used
+
+            # ── 7. Resolve seat (auto-select if "any" or None) ────────────
+            # TASK 6 EXTENSION: auto-assign seat when seat_id is "any"
+            if not seat_id or seat_id.lower() == "any":
+                cur.execute(
+                    """
+                    SELECT ns.seat_id, ns.coach_number
+                    FROM nr_seats ns
+                    JOIN nr_seat_coaches nsc
+                      ON nsc.schedule_id  = ns.schedule_id
+                     AND nsc.coach_number = ns.coach_number
+                    WHERE ns.schedule_id = %s
+                      AND nsc.fare_class  = %s
+                      AND ns.seat_id NOT IN (
+                          SELECT seat_id FROM nr_bookings
+                          WHERE schedule_id = %s
+                            AND travel_date = %s
+                            AND status != 'cancelled'
+                      )
+                    ORDER BY ns.coach_number, ns.seat_id
+                    LIMIT 1
+                    """,
+                    (schedule_id, fare_class, schedule_id, travel_date),
+                )
+                seat_row = cur.fetchone()
+                if not seat_row:
+                    conn.rollback()
+                    return (False, f"No available {fare_class} seats on {schedule_id} for {travel_date}.")
+                seat_id = seat_row["seat_id"]
+                coach = seat_row["coach_number"]
+            else:
+                # Specific seat requested — validate it exists
+                cur.execute(
+                    """
+                    SELECT ns.seat_id, ns.coach_number
+                    FROM nr_seats ns
+                    JOIN nr_seat_coaches nsc
+                      ON nsc.schedule_id  = ns.schedule_id
+                     AND nsc.coach_number = ns.coach_number
+                    WHERE ns.schedule_id = %s
+                      AND ns.seat_id     = %s
+                      AND nsc.fare_class  = %s
+                    """,
+                    (schedule_id, seat_id, fare_class),
+                )
+                seat_row = cur.fetchone()
+                if not seat_row:
+                    conn.rollback()
+                    return (False, f"Seat {seat_id} not found in {fare_class} for {schedule_id}.")
+                coach = seat_row["coach_number"]
+
+                # ── 8. Check seat not already booked ─────────────────────────
+                cur.execute(
+                    "SELECT booking_id FROM nr_bookings "
+                    "WHERE schedule_id = %s AND travel_date = %s "
+                    "AND seat_id = %s AND status != 'cancelled'",
+                    (schedule_id, travel_date, seat_id),
+                )
+                if cur.fetchone():
+                    conn.rollback()
+                    return (False, f"Seat {seat_id} already booked on {travel_date}.")
+
+            # ── 9. Generate booking_id ───────────────────────────────────
+            cur.execute(
+                "SELECT booking_id FROM nr_bookings "
+                "WHERE booking_id ~ '^BK[0-9]+$' "
+                "ORDER BY CAST(SUBSTRING(booking_id FROM 3) AS INTEGER) DESC "
+                "LIMIT 1;"
+            )
+            bk_row = cur.fetchone()
+            new_booking_id = f"BK{int(bk_row['booking_id'][2:]) + 1:03d}" if bk_row else "BK001"
+
+            # ── 10. Get departure_time ───────────────────────────────────
+            cur.execute(
+                "SELECT departure_time::TEXT AS dt FROM nr_schedules "
+                "WHERE schedule_id = %s",
+                (schedule_id,),
+            )
+            dt_row = cur.fetchone()
+            departure_time = dt_row["dt"] if dt_row else None
+
+            # ── 11. Insert booking ───────────────────────────────────────
+            cur.execute(
+                """
+                INSERT INTO nr_bookings
+                    (booking_id, user_id, schedule_id,
+                     origin_station_id, destination_station_id,
+                     travel_date, departure_time,
+                     ticket_type, fare_class, coach, seat_id,
+                     stops_travelled, amount_usd, status,
+                     booked_at, travelled_at)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                        'confirmed', NOW(), NULL)
+                """,
+                (
+                    new_booking_id, user_id, schedule_id,
+                    origin_station_id, destination_station_id,
+                    travel_date, departure_time,
+                    ticket_type, fare_class, coach, seat_id,
+                    stops_travelled, final_amount,
+                ),
+            )
+
+            # ── 12. Generate payment_id ──────────────────────────────────
+            cur.execute(
+                "SELECT payment_id FROM payments "
+                "WHERE payment_id ~ '^PM[0-9]+$' "
+                "ORDER BY CAST(SUBSTRING(payment_id FROM 3) AS INTEGER) DESC "
+                "LIMIT 1;"
+            )
+            pm_row = cur.fetchone()
+            new_payment_id = f"PM{int(pm_row['payment_id'][2:]) + 1:03d}" if pm_row else "PM001"
+
+            # ── 13. Insert payment ───────────────────────────────────────
+            cur.execute(
+                """
+                INSERT INTO payments
+                    (payment_id, nr_booking_id, metro_trip_id,
+                     amount_usd, payment_method, status, paid_at)
+                VALUES (%s, %s, NULL, %s, %s, %s, NOW())
+                """,
+                (new_payment_id, new_booking_id, final_amount, "credit_card", "paid"),
+            )
+
+            # ── 14. Update loyalty points ────────────────────────────────
+            if points_used > 0:
+                cur.execute(
+                    "UPDATE user_loyalty_points "
+                    "SET points_balance = %s, updated_at = NOW() "
+                    "WHERE user_id = %s",
+                    (points_after, user_id),
+                )
+
+            # ── 15. Commit everything atomically ─────────────────────────
+            conn.commit()
+
+            return (True, {
+                "booking_id": new_booking_id,
+                "payment_id": new_payment_id,
+                "user_id": user_id,
+                "original_fare_usd": original_fare,
+                "discount_usd": discount_usd,
+                "final_amount_usd": final_amount,
+                "points_before": points_before,
+                "points_used": points_used,
+                "points_after": points_after,
+                "loyalty_rule": LOYALTY_RULE_TEXT,
+            })
+
+    except Exception as e:
+        conn.rollback()
+        return (False, f"Loyalty booking failed: {e}")
+    finally:
+        conn.close()

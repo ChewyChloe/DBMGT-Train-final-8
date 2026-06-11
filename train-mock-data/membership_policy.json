@@ -1,0 +1,34 @@
+{
+  "membership_rewards": {
+    "loyalty_points": {
+      "program_name": "TransitFlow Loyalty Rewards Program",
+      "earning_rule": "Passengers earn 1 loyalty point for every 1 USD spent on completed national rail bookings.",
+      "redemption_rule": "100 loyalty points can be redeemed for a 1.00 USD discount on eligible national rail bookings.",
+      "maximum_discount_per_booking_usd": 1.00,
+      "minimum_points_to_redeem": 100,
+      "points_per_usd_spent": 1,
+      "expiry": "Loyalty points do not expire.",
+      "eligibility": "Only registered users are eligible to earn and redeem loyalty points.",
+      "limitations": "Points cannot reduce the fare below 0 USD. Points cannot be exchanged for cash. Only one redemption per booking is allowed.",
+      "how_to_check": "Use the check_loyalty_points command or ask the assistant: How many loyalty points do I have?"
+    },
+    "membership_tiers": {
+      "current_implementation": "All registered users belong to a single membership tier with the same earning and redemption rates.",
+      "future_tiers": "Future versions may introduce Silver, Gold, and Platinum tiers with enhanced earning multipliers and higher per-booking discount caps."
+    }
+  },
+  "transfer_policy": {
+    "transfer_waiting_penalty": {
+      "description": "Routes involving interchanges between City Metro and National Rail networks may include a transfer waiting penalty.",
+      "purpose": "The penalty accounts for the walking time between platforms, waiting for the next service, and potential crowding at busy interchange stations.",
+      "default_wait_time_min": 4,
+      "how_it_works": "A fixed transfer waiting time of 4 minutes is added to the total journey time for each interchange on the route."
+    },
+    "crowded_station_penalty": {
+      "description": "Busy interchange stations receive a small additional crowding penalty when calculating adjusted journey scores.",
+      "affected_stations": "Central Station (MS01/NR01) is the busiest interchange and receives a higher crowding penalty of 1.5 minutes.",
+      "other_interchanges": "Old Town (MS07/NR03) and Ferndale (MS15/NR07) receive a lower crowding penalty of 0.5 minutes.",
+      "how_to_avoid": "Ask the assistant to find a route while avoiding crowded transfers to see the adjusted journey score."
+    }
+  }
+}
