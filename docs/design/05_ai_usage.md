@@ -1,66 +1,129 @@
 # 5. AI Tool Usage Evidence
 
-## 5.1 AI Use Case 1 — Debugging Neo4j Authentication
+AI tools were used as programming and design assistants throughout this project. They helped with schema documentation, query implementation, debugging, and Task 6 extension development. All AI outputs were checked against the actual repository files, schema definitions, seed scripts, and runtime test results before being accepted. The examples below describe five specific cases where AI was used, including one case where the AI output was incorrect and required human correction.
 
-* **Context & Problem Statement:**  
-  During the initial multi-container deployment, the backend application consistently failed to establish a connection with the Neo4j Graph Database container, resulting in a continuous loop of `ServiceUnavailable: Cannot connect to any server` errors. 
-  
-* **Prompt Engineering Strategy:**  
-  AI assistance was leveraged by feeding the system configuration files (`docker-compose.yml`, `.env`, and `skeleton/config.py`) into the LLM with a specific debugging prompt:  
-  > *"Analyze why my Python backend is getting a Neo4j connection timeout despite the container status showing healthy in Docker Desktop."*
+## 5.1 Example 1: Relational Schema and Normalisation Review
 
-* **AI Recommendation:**  
-  The LLM diagnosed a critical mismatch: the backend script was relying on a legacy hardcoded fallback password mechanism within the connection string logic, whereas the environment variables in the newly initialized Docker layer had been strictly updated to a more secure credential string.
+### Context
 
-* **Human Verification & Resolution:**  
-  Human verification confirmed the issue. The development team audited the configuration by searching for the outdated password token `transitflow2026` across the codebase, manually verified Neo4j credentials via the browser routing (`http://localhost:7474`), and aligned the environment variables. The hardcoded fallbacks were eliminated, resolving the synchronization block.
+We needed to document and verify the PostgreSQL relational schema for Sections 1 and 2 of the Design Document. The schema includes 19 tables covering users, credentials, metro and national rail stations, schedules, stops, fare classes, seat coaches, seats, bookings, travel history, payments, feedback, policy documents, and the Task 6 `user_loyalty_points` table. The goal was to produce an accurate ER diagram, correct cardinality descriptions, and a normalisation analysis that matched the actual `schema.sql` rather than assumptions about what the schema should look like.
 
-## 5.2 AI Use Case 2 — RAG Seeder Review
+### Prompt
 
-### 1. Optimization Objectives & AI Prompting Strategy
-AI assistance was leveraged to conduct a rigorous code review of `skeleton/seed_vectors.py`, focusing on systemic reliability, data integrity, and semantic retrieval performance. The review prioritized three architectural vectors:
-* **Idempotency Enforcement:** Ensuring that executing the seeding script multiple times cleanly refreshes or upserts data without replicating structural leaf nodes or polluting the vector database with duplicate payloads.
-* **Domain-Specific Label Alignment:** Standardizing network and transportation terminology (e.g., migrating ambiguous `MRT` naming conventions to strict `Metro` identifiers) across unstructured source documents to ensure alignment with PostgreSQL and Neo4j schemas.
-* **Semantic Chunking & Parsing Quality:** Maximizing document retrieval quality by restructuring how complex, nested JSON rule hierarchies are flattened into standalone, highly contextual text chunks.
+We asked the AI to inspect `schema.sql`, `seed_postgres.py`, and `queries.py`, then draft Section 1 (ER diagram, entity descriptions, cardinality summary, and constraint analysis) and Section 2 (1NF/2NF/3NF examples, de-normalisation trade-offs, and password hashing explanation). The prompt specified that the AI should use functional dependency notation, name specific normal forms, and base all claims on actual constraints found in the schema file.
 
-### 2. Refactoring Artifacts & Code Enhancements
-Based on the AI-driven architectural feedback, several critical engineering enhancements were integrated into the database layer:
+### Outcome
 
-* **Conflict Resolution via Upsert Logic:** To eliminate duplicate record accumulation upon re-running the pipeline, the database ingestion layer was refactored. The standard `INSERT` statement was hardened using a relational constraint clause to guarantee strict idempotent state-management:
-    ```sql
-    -- Idempotent Insertion Pattern Verified via Code Review
-    INSERT INTO policy_documents (title, category, content, embedding, source_file)
-    VALUES (%s, %s, %s, %s::vector, %s)
-    ON CONFLICT (id) 
-    DO UPDATE SET 
-        content = EXCLUDED.content, 
-        embedding = EXCLUDED.embedding;
-    ```
-* **Deterministic Schema Validation:** AI code analysis recommended executing an explicit `TRUNCATE` or conditional setup routine inside `seed_vectors.py` prior to transaction execution. This guarantees that the final baseline system state remains fully deterministic.
+The AI produced a detailed first draft with a Mermaid ER diagram, entity group descriptions, and normalisation examples using `nr_schedule_stops` (2NF, composite key partial dependency) and `payments` separation as part of the 3NF discussion. We manually reviewed the output against `schema.sql` and found two issues that needed correction:
 
-### 3. Human-in-the-Loop Verification Results
-Following the automated review and subsequent code modifications, comprehensive manual testing was conducted to benchmark the operational integrity of the RAG system:
-* **Document Count Verification:** Executing `seed_vectors.py` repeatedly yielded a consistent, non-duplicating total document count. The baseline system stabilizes at exactly **71 document chunks** for Tasks 1–5, and expands deterministically to exactly **75 document chunks** upon the ingestion of the Task 6 `membership_policy.json` extension.
-* **Empirical Semantic Evaluation:** Empirical testing verified that the live system achieves an optimal recall rate. When the agent is challenged with semantic edge cases (such as medical emergencies on rolling stock or pass refund expiration windows), it consistently retrieves the exact policy chunks without cross-domain context contamination or hallucinated boundaries.
+1. The initial draft described `REGISTERED_USERS` to `USER_LOYALTY_POINTS` as a mandatory 1:1 relationship. We corrected this to zero-or-one (1:0..1) because not every user is required to have a loyalty points row.
+2. The draft described `NR_BOOKINGS` to `PAYMENTS` and `FEEDBACK` as at-most-one relationships (1:0..1). We checked `schema.sql` and confirmed there are no UNIQUE constraints on `payments.nr_booking_id` or `feedback.nr_booking_id`, so these are actually one-to-many (1:N) relationships. We corrected the ER diagram and cardinality summary accordingly.
 
-## 5.3 Human Verification
+We also verified that the password hashing section correctly described PBKDF2-HMAC-SHA256 with per-user salt and 100,000 iterations, matching the `_hash_password` function in `queries.py`.
 
-### 1. Unified Integration Testing Protocol
-To bridge the gap between automated AI recommendations and deterministic production behavior, a comprehensive "Human-in-the-Loop" verification matrix was executed. Since TransitFlow relies on a multi-database architecture (PostgreSQL for relational operations, Neo4j for intermodal transit routing, and pgvector for unstructured policy retrieval), human-led verification focused on validating the cross-tool reasoning pathways of the LLM Agent.
+## 5.2 Example 2: PostgreSQL Booking Transaction and Task 6 Loyalty Discount
 
-### 2. Multi-Layered Validation Matrix
+### Context
 
-#### A. Backend Function Call & Relational Verification (PostgreSQL)
-* **Testing Procedure:** Manual execution of deterministic database routines (e.g., `execute_booking`, `query_metro_fare`) to benchmark baseline values against LLM SQL synthesis.
-* **Verification Result:** Verified that exact numerical outputs, financial ledger transactions, and temporal updates (such as the 6-month limit on downloading `tax_receipts`) trigger precise, low-level constraints without data type conflicts or schema mismatches.
+Task 6 required a loyalty points discount system. Users with sufficient points should receive a discount when booking a national rail ticket. The booking flow needed to create a row in `nr_bookings`, a row in `payments`, and update the user's `points_balance` in `user_loyalty_points`, all within one PostgreSQL transaction. The risk was that without proper transaction handling, points could be deducted without a booking being created, or two concurrent requests could spend the same points twice.
 
-#### B. Topographical Routing & Pathfinding Validation (Neo4j)
-* **Testing Procedure:** Manual deployment of `seed_neo4j.py` and direct execution of Cypher test queries via the Neo4j Browser utility.
-* **Verification Result:** Confirmed that structural graph relationships (such as the bidirectional `[:INTERCHANGE_TO]` edges mapping Metro-to-Rail transfers) resolve with accurate weight constraints. This ensures that when the AI Agent assesses service delay propagation, its pathfinding logic strictly matches the concrete graph topology.
+### Prompt
 
-#### C. Semantic Search Constraints & Precision (pgvector)
-* **Testing Procedure:** Hardcoded threshold injection and parameter manual testing of the `query_policy_vector_search` routine within the interactive runtime terminal environment.
-* **Verification Result:** Validated that evaluating query embeddings against the `policy_documents` table under a strict similarity threshold effectively truncates irrelevant noise. The testing confirmed zero-hallucination boundary compliance when fetching complex text clauses, such as pro-rata refund penalties on commuter passes or lost property retention lifecycles.
+We asked the AI to implement the Task 6 loyalty extension with minimal regression risk. Specifically: add the `user_loyalty_points` table to `schema.sql`, add `query_user_loyalty_points` for looking up a user's balance, and add `execute_booking_with_loyalty_discount` as a new function alongside the existing `execute_booking` (without modifying the original). We asked the AI to use transaction safety and row-level locking for the loyalty points update.
 
-### 3. Regression Testing Framework & Regression Sign-Off
-All manual validation scenarios were codified directly into the unified 15-question test harness (`test_questions.md`). This regression evaluation suite guarantees that any future optimizations made to the embedding pipelines or multi-database schemas can be instantly cross-checked by the team, establishing a rigid, production-ready baseline for final deployment.
+### Outcome
+
+The AI suggested using `SELECT ... FOR UPDATE` to lock the `user_loyalty_points` row at the start of the transaction, preventing concurrent double spending. The function calculates the discount (100 points = $1.00 USD, max $1.00 per booking), creates the booking and payment with the discounted amount, and updates the point balance, all within a single `BEGIN ... COMMIT` block. If any step fails, the entire transaction rolls back.
+
+We tested the flow directly and confirmed the results:
+
+- `original_fare_usd`: 8.5
+- `discount_usd`: 1.0
+- `final_amount_usd`: 7.5
+- `points_before`: 120, `points_used`: 100, `points_after`: 20
+
+However, one AI-generated issue required correction. The initial implementation treated `seat_id="any"` as a literal seat identifier. When we tested a booking with `seat_id="any"`, the function failed with the error "Seat any not found in standard for NR_SCH01." We fixed the function so that when `seat_id="any"` is passed, it automatically queries for an available seat in the requested fare class and selects one, rather than looking for a seat literally named "any."
+
+## 5.3 Example 3: Neo4j Transfer Penalty and Graph Routing
+
+### Context
+
+Task 6 required transfer waiting penalty and crowded interchange penalty for cross-system routes. The existing Neo4j graph already supported `query_shortest_route`, `query_cheapest_route`, `query_alternative_routes`, `query_interchange_path`, and `query_delay_ripple`. We wanted to add transfer penalty logic without breaking any of these existing functions.
+
+### Prompt
+
+We asked the AI to add `transfer_wait_time_min` and `crowd_penalty` properties to the `INTERCHANGE_TO` relationships in the Neo4j seed data, and to add `query_route_with_transfer_penalty` as a new graph query function. We specified that the new function should be additive (not replacing `query_shortest_route` or `query_cheapest_route`) so the existing graph regression tests would still pass.
+
+### Outcome
+
+The AI helped draft the new relationship properties in `seed_neo4j.py` and the `query_route_with_transfer_penalty` function in `databases/graph/queries.py`. We verified the seeded Neo4j relationship properties directly:
+
+- MS01 (Central Square) to NR01 (Central Station): `transfer_wait_time_min` = 4, `crowd_penalty` = 1.5
+- MS07 to NR03: `transfer_wait_time_min` = 4, `crowd_penalty` = 0.5
+- MS15 to NR07: `transfer_wait_time_min` = 4, `crowd_penalty` = 0.5
+
+The direct backend test passed:
+
+- `query_route_with_transfer_penalty('MS01', 'NR05')`
+- Route: MS01, MS07, NR03, NR05
+- `base_time_min`: 37
+- `transfer_wait_penalty_min`: 4.0
+- `crowd_penalty`: 0.5
+- `adjusted_score`: 41.5
+
+We kept this as an additive Task 6 function. The original graph queries continued to work without modification.
+
+## 5.4 Example 4: RAG Membership Policy and Vector Seeding
+
+### Context
+
+The RAG system originally contained policy documents for refund rules, booking policies, ticket information, and conduct guidelines. Task 6 needed the Agent to answer questions about loyalty points, membership rewards, and transfer waiting penalties. The goal was to add membership policy content to vector search without breaking existing policy retrieval.
+
+### Prompt
+
+We asked the AI to create `membership_policy.json` with policy chunks covering loyalty point earning, redemption rules, transfer waiting penalties, and crowded station penalties. We also asked the AI to update `seed_vectors.py` to load the new policy file alongside the existing ones. The seeder needed to remain idempotent (re-running it should not create duplicate documents).
+
+### Outcome
+
+The AI helped create `membership_policy.json` and update `seed_vectors.py` to include it in the policy loading loop. After seeding, the total `policy_documents` count increased from 71 to 75, confirming the four new membership policy chunks were added.
+
+We tested semantic search and confirmed that relevant documents were retrieved:
+
+- Query "loyalty points" retrieved: Membership Policy, Membership Rewards, Loyalty Points
+- Query "transfer waiting penalty" retrieved: Membership Policy, Transfer Policy, Transfer Waiting Penalty
+- Query "crowded station penalty" retrieved: Membership Policy, Transfer Policy, Crowded Station Penalty
+
+We also re-tested existing RAG queries (such as "lost and found" and "maintenance disruption refund") to confirm they still returned the correct policy documents. The representative existing RAG tests we reran still returned the expected documents.
+
+## 5.5 Example 5: Incorrect AI Output and Human Correction
+
+### Context
+
+During QA testing, we asked the AI to run and analyze the full QA Test Suite covering PostgreSQL, Neo4j, RAG, and Agent layers. The goal was to classify each test case as PASS, PARTIAL, FAIL, or UNSUPPORTED based on actual runtime results.
+
+### Prompt
+
+We asked the AI to test the TransitFlow system across all five categories (PostgreSQL relational, Neo4j graph, RAG vector search, Agent runtime, and Task 6 optional bonus) and produce a structured test report with pass/fail classifications.
+
+### Outcome
+
+The AI-generated report incorrectly claimed that Task 6 was not implemented. It classified `query_user_loyalty_points` and `query_route_with_transfer_penalty` as missing, and marked the corresponding test cases as UNSUPPORTED.
+
+We identified the error by checking `git status`. The terminal was on the branch `review/yichun-seeder-update6` instead of `task6/loyalty-transfer-rag-bonus`. The AI had tested against the wrong branch, where the Task 6 functions had not been merged yet.
+
+After switching back to `task6/loyalty-transfer-rag-bonus`, we verified the functions directly:
+
+- `Select-String` confirmed `query_route_with_transfer_penalty` exists in `databases/graph/queries.py`.
+- `Select-String` confirmed `query_user_loyalty_points` and `execute_booking_with_loyalty_discount` exist in `databases/relational/queries.py`.
+- Direct function calls confirmed both functions returned correct results at runtime.
+
+We corrected the QA classifications:
+
+- B5 (Task 6 Transfer Penalty): backend PASS, Agent PARTIAL (the Agent calls the tool but the lightweight LLM sometimes summarizes the penalty details imprecisely).
+- C5 (Task 6 Loyalty Discount): PASS.
+
+This example shows that AI output was not accepted without verification. Branch state, function existence, and runtime results all needed to be checked manually before the test report could be trusted.
+
+## 5.6 How AI Output Was Reviewed
+
+AI was useful for drafting documentation, implementing query functions, and planning test cases. However, we did not treat any AI output as final without checking it ourselves. Every AI suggestion was verified through a combination of: `git status` and branch checks, code search with `Select-String` or `grep`, `py_compile` for syntax validation, seed script execution, direct backend function calls with test parameters, and Agent debug output comparison. This review process caught errors (such as the wrong-branch QA report and the literal "any" seat bug) and prevented incorrect AI output from being merged into the project.
